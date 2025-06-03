@@ -59,6 +59,6 @@ Desktop.ini
 CLAUDE.md
 
 # Package manager files
-package-lock.json
+# Note: package-lock.json should be committed!
 yarn.lock
 pnpm-lock.yaml
