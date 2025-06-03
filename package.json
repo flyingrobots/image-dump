@@ -1,0 +1,17 @@
+{
+  "name": "image-dump",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "optimize": "node scripts/optimize-images.js",
+    "optimize:watch": "node scripts/optimize-images.js --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "sharp": "^0.34.2",
+    "sharp-cli": "^5.1.0"
+  }
+}
