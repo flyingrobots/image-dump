@@ -39,11 +39,28 @@ logs/
 # Testing
 coverage/
 .nyc_output/
+*.lcov
+junit.xml
+test-results/
+screenshots/
 
 # Temporary files
 *.tmp
 *.temp
 .cache/
+.tmp/
+.temp/
+.parcel-cache/
+
+# Temporary test files
+original/test-*.png
+original/test-*.jpg
+optimized/test-*
+
+# Backup files
+*.bak
+*.backup
+*_old
 
 # IDE files
 .idea/
@@ -62,3 +79,19 @@ CLAUDE.md
 # Note: package-lock.json should be committed!
 yarn.lock
 pnpm-lock.yaml
+
+# Docker volumes (local testing)
+.docker-volumes/
+
+# Local config overrides
+.imagerc.local
+config.local.json
+
+# Performance reports
+.lighthouseci/
+performance-reports/
+
+# Vim swap files
+*.swp
+*.swo
+*~
