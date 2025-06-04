@@ -1,0 +1,19 @@
+# Test image with dev dependencies
+FROM node:20-alpine
+
+# Install git for git-based operations in tests
+RUN apk add --no-cache git git-lfs
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies including dev
+RUN npm ci
+
+# Copy all code including tests
+COPY . .
+
+# Run tests by default
+CMD ["npm", "test"]

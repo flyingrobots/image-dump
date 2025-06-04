@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Service for running image optimization
+  optimize:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./original:/app/original:ro
+      - ./optimized:/app/optimized
+      - ./.git:/app/.git:ro  # For git-lfs operations
+    command: node scripts/optimize-images.js
+
+  # Service for running optimization with force flag
+  optimize-force:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./original:/app/original:ro
+      - ./optimized:/app/optimized
+      - ./.git:/app/.git:ro
+    command: node scripts/optimize-images.js --force
+
+  # Service for running optimization with pull-lfs flag
+  optimize-lfs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./original:/app/original:ro
+      - ./optimized:/app/optimized
+      - ./.git:/app/.git
+    command: node scripts/optimize-images.js --pull-lfs
+
+  # Service for running tests
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./coverage:/app/coverage
+    command: npm test
+
+  # Service for running tests with coverage
+  test-coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./coverage:/app/coverage
+    command: npm test -- --coverage
+
+  # Service for running tests in watch mode (development)
+  test-watch:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./scripts:/app/scripts
+      - ./tests:/app/tests
+      - ./coverage:/app/coverage
+      - ./package.json:/app/package.json
+      - ./jest.config.js:/app/jest.config.js
+    command: npm test -- --watch
