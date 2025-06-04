@@ -6,6 +6,7 @@ on:
       - 'original/**'
     branches:
       - main
+  workflow_dispatch: # Allow manual triggering
 
 jobs:
   optimize:
@@ -21,17 +22,17 @@ jobs:
           lfs: true
           token: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
+      - name: Pull LFS files
+        run: git lfs pull
       
-      - name: Install dependencies
-        run: npm ci
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build optimization image
+        run: docker-compose build optimize
       
       - name: Run optimization
-        run: npm run optimize
+        run: docker-compose run --rm optimize-lfs
       
       - name: Check for changes
         id: verify-changed-files
@@ -46,8 +47,22 @@ jobs:
       - name: Commit and push optimized images
         if: steps.verify-changed-files.outputs.changed == 'true'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           git add optimized/
-          git commit -m "Optimize images from original/ [skip ci]"
+          git commit -m "🖼️ Optimize images from commit ${{ github.sha }} [skip ci]"
           git push
+      
+      - name: Create job summary
+        if: always()
+        run: |
+          echo "## Image Optimization Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.verify-changed-files.outputs.changed }}" == "true" ]; then
+            echo "✅ Images were optimized and committed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Changed files:" >> $GITHUB_STEP_SUMMARY
+            git diff --name-only HEAD~1 HEAD -- optimized/ | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No images needed optimization" >> $GITHUB_STEP_SUMMARY
+          fi
