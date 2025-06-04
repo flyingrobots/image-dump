@@ -125,11 +125,7 @@ async function optimizeImage(inputPath, filename) {
     
     // Load image once and rotate based on EXIF data
     const image = sharp(inputPath)
-      .rotate() // Auto-rotate based on EXIF orientation
-      .withMetadata({
-        // Strip all metadata except copyright
-        exif: {}
-      });
+      .rotate(); // Auto-rotate based on EXIF orientation
     
     // Create WebP version
     await image
@@ -242,6 +238,11 @@ async function main() {
       console.log(`   Errors: ${errors} images`);
     }
     console.log('='.repeat(50));
+    
+    // Exit with error code if there were errors
+    if (errors > 0 || lfsErrors > 0) {
+      process.exit(1);
+    }
   } catch (error) {
     console.error('Fatal error:', error);
     process.exit(1);
