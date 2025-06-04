@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://github.com/YOUR_USERNAME/image-dump/tree/main/docs
+    about: Check the documentation for usage guides and architecture details
+  - name: 💬 Discussions
+    url: https://github.com/YOUR_USERNAME/image-dump/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 🚦 Roadmap
+    url: https://github.com/YOUR_USERNAME/image-dump/blob/main/docs/ROADMAP.md
+    about: Check what features are planned or in progress
