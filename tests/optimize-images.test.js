@@ -1,10 +1,11 @@
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 const sharp = require('sharp');
 
 describe('optimize-images.js', () => {
-  const testDir = path.join(__dirname, 'test-images');
+  const testDir = path.join(os.tmpdir(), `image-dump-test-${Date.now()}`);
   const inputDir = path.join(testDir, 'original');
   const outputDir = path.join(testDir, 'optimized');
   const scriptPath = path.join(__dirname, '../scripts/optimize-images.js');
@@ -25,9 +26,10 @@ describe('optimize-images.js', () => {
     const originalDir = process.cwd();
     try {
       process.chdir(testDir);
-      const result = execSync(`node ${scriptPath} ${args}`, {
+      const result = execSync(`node ${scriptPath} ${args} 2>&1`, {
         env: { ...process.env, ...env },
-        encoding: 'utf8'
+        encoding: 'utf8',
+        shell: true
       });
       return { output: result, exitCode: 0 };
     } catch (error) {
