@@ -14,7 +14,7 @@ Choose one of the following:
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/image-dump.git
+git clone https://github.com/flyingrobots/image-dump.git
 cd image-dump
 
 # Run optimization
@@ -27,7 +27,7 @@ make optimize
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/image-dump.git
+git clone https://github.com/flyingrobots/image-dump.git
 cd image-dump
 
 # Install dependencies
@@ -99,16 +99,16 @@ npm run optimize:watch
 ### In GitHub README
 
 ```markdown
-![Alt text](https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image.webp)
+![Alt text](https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image.webp)
 ```
 
 ### In HTML with Fallback
 
 ```html
 <picture>
-  <source srcset="https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image.avif" type="image/avif">
-  <source srcset="https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image.webp" type="image/webp">
-  <img src="https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image.jpg" alt="Description">
+  <source srcset="https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image.avif" type="image/avif">
+  <source srcset="https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image.webp" type="image/webp">
+  <img src="https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image.jpg" alt="Description">
 </picture>
 ```
 
@@ -117,9 +117,9 @@ npm run optimize:watch
 ```html
 <picture>
   <source media="(max-width: 400px)" 
-          srcset="https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image-thumb.webp">
-  <source srcset="https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image.webp">
-  <img src="https://raw.githubusercontent.com/YOUR_USERNAME/image-dump/main/optimized/image.jpg" alt="Description">
+          srcset="https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image-thumb.webp">
+  <source srcset="https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image.webp">
+  <img src="https://raw.githubusercontent.com/flyingrobots/image-dump/main/optimized/image.jpg" alt="Description">
 </picture>
 ```
 
@@ -174,10 +174,10 @@ npm run optimize -- --pull-lfs
 
 ```bash
 # Rebuild images
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Clean up
-docker-compose down -v
+docker compose down -v
 docker system prune
 ```
 

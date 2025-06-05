@@ -178,7 +178,7 @@ This document outlines the development phases and planned features for the Image
 ## Contributing
 
 Want to help? Check out:
-1. [Open Issues](https://github.com/YOUR_USERNAME/image-dump/issues)
+1. [Open Issues](https://github.com/flyingrobots/image-dump/issues)
 2. [Feature Specifications](features/)
 3. [Development Guide](guides/development.md)
 
