@@ -14,33 +14,33 @@ help:
 
 # Build Docker images
 build:
-	docker-compose build
+	docker compose build
 
 # Run optimization
 optimize: build
-	docker-compose run --rm optimize
+	docker compose run --rm optimize
 
 # Force reprocess all images
 optimize-force: build
-	docker-compose run --rm optimize-force
+	docker compose run --rm optimize-force
 
 # Run with Git LFS support
 optimize-lfs: build
-	docker-compose run --rm optimize-lfs
+	docker compose run --rm optimize-lfs
 
 # Run tests
 test: build
-	docker-compose run --rm test
+	docker compose run --rm test
 
 # Run tests with coverage
 test-coverage: build
-	docker-compose run --rm test-coverage
+	docker compose run --rm test-coverage
 
 # Run tests in watch mode
 test-watch: build
-	docker-compose run --rm test-watch
+	docker compose run --rm test-watch
 
 # Clean up
 clean:
-	docker-compose down -v
+	docker compose down -v
 	docker system prune -f
