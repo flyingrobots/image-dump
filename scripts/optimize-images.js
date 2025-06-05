@@ -118,7 +118,16 @@ async function optimizeImage(inputPath, filename) {
         })
         .webp({ quality: 80 })
         .toFile(path.join(OUTPUT_DIR, `${name}-thumb.webp`));
-        
+      
+      // Validate output files
+      try {
+        await sharp(path.join(OUTPUT_DIR, filename)).metadata();
+        await sharp(path.join(OUTPUT_DIR, `${name}-thumb.webp`)).metadata();
+      } catch (validationError) {
+        console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
+        return 'error';
+      }
+      
       console.log(`✅ Optimized ${filename}`);
       return 'processed';
     }
@@ -177,13 +186,48 @@ async function optimizeImage(inputPath, filename) {
       })
       .webp({ quality: 80 })
       .toFile(outputPaths[3]);
-      
+    
+    // Validate all output files exist and are valid
+    try {
+      for (const outputPath of outputPaths) {
+        await sharp(outputPath).metadata();
+      }
+    } catch (validationError) {
+      console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
+      return 'error';
+    }
+    
     console.log(`✅ Optimized ${filename}`);
     return 'processed';
   } catch (error) {
     console.error(`❌ Error processing ${filename}: ${error.message}`);
     return 'error';
   }
+}
+
+async function getDirectorySize(dirPath) {
+  let totalSize = 0;
+  try {
+    const files = await fs.readdir(dirPath);
+    for (const file of files) {
+      const filePath = path.join(dirPath, file);
+      const stats = await fs.stat(filePath);
+      if (stats.isFile()) {
+        totalSize += stats.size;
+      }
+    }
+  } catch (error) {
+    // Directory might not exist yet
+  }
+  return totalSize;
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 async function main() {
@@ -237,6 +281,50 @@ async function main() {
     if (errors > 0) {
       console.log(`   Errors: ${errors} images`);
     }
+    
+    // Calculate and display size savings
+    if (processed > 0) {
+      let processedOriginalSize = 0;
+      let processedOptimizedSize = 0;
+      
+      // Calculate sizes only for processed files
+      for (const file of imageFiles) {
+        const inputPath = path.join(INPUT_DIR, file);
+        const name = path.parse(file).name;
+        const ext = path.parse(file).ext.toLowerCase();
+        
+        try {
+          const inputStats = await fs.stat(inputPath);
+          processedOriginalSize += inputStats.size;
+          
+          // Check main output file (not thumbnails or alternate formats)
+          const mainOutputPath = path.join(OUTPUT_DIR, ext === '.gif' ? file : 
+            (ext === '.webp' ? file : `${name}${ext === '.png' ? '.png' : '.jpg'}`));
+          
+          try {
+            const outputStats = await fs.stat(mainOutputPath);
+            processedOptimizedSize += outputStats.size;
+          } catch {
+            // Output file might not exist if there was an error
+          }
+        } catch {
+          // Input file might not exist
+        }
+      }
+      
+      const savedBytes = processedOriginalSize - processedOptimizedSize;
+      const savedPercent = processedOriginalSize > 0 ? ((savedBytes / processedOriginalSize) * 100).toFixed(1) : 0;
+      
+      console.log(`\n📊 Size Statistics:`);
+      console.log(`   Original size: ${formatBytes(processedOriginalSize)}`);
+      console.log(`   Optimized size: ${formatBytes(processedOptimizedSize)}`);
+      if (savedBytes > 0) {
+        console.log(`   Space saved: ${formatBytes(savedBytes)} (${savedPercent}%)`);
+      } else {
+        console.log(`   Size increased: ${formatBytes(Math.abs(savedBytes))} (+${Math.abs(savedPercent)}%)`);
+      }
+    }
+    
     console.log('='.repeat(50));
     
     // Exit with error code if there were errors
@@ -254,6 +342,8 @@ module.exports = {
   isGitLfsPointer,
   shouldProcessImage,
   optimizeImage,
+  getDirectorySize,
+  formatBytes,
   main
 };
 
