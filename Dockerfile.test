@@ -12,8 +12,13 @@ COPY package*.json ./
 # Install all dependencies including dev
 RUN npm ci
 
-# Copy all code including tests
-COPY . .
+# Copy jest config
+COPY jest.config.js ./
+
+# Copy source code
+COPY scripts ./scripts
+
+# Tests will be mounted as a volume
 
 # Run tests by default
 CMD ["npm", "test"]
