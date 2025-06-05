@@ -29,10 +29,21 @@ jobs:
         uses: docker/setup-buildx-action@v3
       
       - name: Build optimization image
-        run: docker-compose build optimize
+        run: docker compose build optimize
       
       - name: Run optimization
-        run: docker-compose run --rm optimize-lfs
+        id: run-optimization
+        run: |
+          set -e
+          OUTPUT=$(docker compose run --rm optimize-lfs 2>&1) || EXIT_CODE=$?
+          echo "$OUTPUT"
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          if [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "::error::Image optimization failed with exit code ${EXIT_CODE}"
+            exit ${EXIT_CODE}
+          fi
       
       - name: Check for changes
         id: verify-changed-files
@@ -50,7 +61,16 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add optimized/
-          git commit -m "🖼️ Optimize images from commit ${{ github.sha }} [skip ci]"
+          
+          # Create commit message with status
+          COMMIT_MSG="🖼️ Optimize images from commit ${{ github.sha }}"
+          if grep -q "❌ Error" <<< "${{ steps.run-optimization.outputs.output }}"; then
+            ERROR_COUNT=$(echo "${{ steps.run-optimization.outputs.output }}" | grep -c "❌ Error" || true)
+            COMMIT_MSG="$COMMIT_MSG (⚠️ ${ERROR_COUNT} errors)"
+          fi
+          COMMIT_MSG="$COMMIT_MSG [skip ci]"
+          
+          git commit -m "$COMMIT_MSG"
           git push
       
       - name: Create job summary
@@ -58,11 +78,30 @@ jobs:
         run: |
           echo "## Image Optimization Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.verify-changed-files.outputs.changed }}" == "true" ]; then
-            echo "✅ Images were optimized and committed" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract key information from optimization output
+          if grep -q "✅ Optimization complete!" <<< "${{ steps.run-optimization.outputs.output }}"; then
+            echo "### 📊 Optimization Summary" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.run-optimization.outputs.output }}" | grep -A20 "Optimization complete!" >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Changed files:" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check for errors
+          if grep -q "❌ Error" <<< "${{ steps.run-optimization.outputs.output }}"; then
+            echo "### ⚠️ Errors Encountered" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.run-optimization.outputs.output }}" | grep "❌ Error" >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ steps.verify-changed-files.outputs.changed }}" == "true" ]; then
+            echo "### ✅ Images were optimized and committed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Changed files:" >> $GITHUB_STEP_SUMMARY
             git diff --name-only HEAD~1 HEAD -- optimized/ | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️ No images needed optimization" >> $GITHUB_STEP_SUMMARY
+            echo "### ℹ️ No images needed optimization" >> $GITHUB_STEP_SUMMARY
           fi
