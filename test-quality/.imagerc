@@ -1,0 +1,14 @@
+{
+  "qualityRules": [
+    {
+      "pattern": "**/*",
+      "quality": {
+        "png": 50,
+        "webp": 40,
+        "avif": 30
+      }
+    }
+  ],
+  "formats": ["webp", "avif", "original"],
+  "generateThumbnails": false
+}

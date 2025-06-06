@@ -33,3 +33,25 @@
 //   "exponentialBackoff": true,   // Use exponential backoff
 //   "errorLog": "errors.log"      // Custom error log path
 // }
+//
+// Per-image quality rules:
+// "qualityRules": [
+//   {
+//     "pattern": "*-hero.*",         // Match hero images
+//     "quality": { "webp": 95 }
+//   },
+//   {
+//     "directory": "products/",      // Match files in products directory
+//     "quality": { "webp": 70 }
+//   },
+//   {
+//     "minWidth": 3000,              // Match high-resolution images
+//     "quality": { "jpeg": 95 }
+//   },
+//   {
+//     "pattern": "*-thumb.*",        // Combine multiple criteria
+//     "directory": "gallery/",
+//     "maxWidth": 500,
+//     "quality": { "webp": 50 }
+//   }
+// ]

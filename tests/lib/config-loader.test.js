@@ -196,6 +196,63 @@ describe('ConfigLoader', () => {
       
       expect(() => configLoader.validateConfig(partialConfig)).not.toThrow();
     });
+    
+    it('should accept valid quality rules', () => {
+      const configWithRules = {
+        qualityRules: [
+          {
+            pattern: '*-hero.*',
+            quality: { webp: 95, avif: 90 }
+          },
+          {
+            directory: 'products/',
+            quality: { webp: 70 }
+          },
+          {
+            minWidth: 3000,
+            quality: { jpeg: 95 }
+          }
+        ]
+      };
+      
+      expect(() => configLoader.validateConfig(configWithRules)).not.toThrow();
+    });
+    
+    it('should reject quality rules without criteria', () => {
+      const invalidConfig = {
+        qualityRules: [
+          {
+            quality: { webp: 90 }
+          }
+        ]
+      };
+      
+      expect(() => configLoader.validateConfig(invalidConfig))
+        .toThrow('qualityRules[0] must have at least one matching criteria');
+    });
+    
+    it('should reject quality rules with invalid quality values', () => {
+      const invalidConfig = {
+        qualityRules: [
+          {
+            pattern: '*.jpg',
+            quality: { jpeg: 101 }
+          }
+        ]
+      };
+      
+      expect(() => configLoader.validateConfig(invalidConfig))
+        .toThrow('qualityRules[0].quality.jpeg must be between 1 and 100');
+    });
+    
+    it('should reject non-array qualityRules', () => {
+      const invalidConfig = {
+        qualityRules: { pattern: '*.jpg', quality: { jpeg: 90 } }
+      };
+      
+      expect(() => configLoader.validateConfig(invalidConfig))
+        .toThrow('qualityRules must be an array');
+    });
   });
   
   describe('mergeConfigs', () => {

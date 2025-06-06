@@ -76,6 +76,7 @@ Create a `.imagerc` file in your project root to customize optimization settings
 - **thumbnailWidth**: Thumbnail size in pixels
 - **preserveMetadata**: Keep EXIF/metadata (`true`) or strip it (`false`, default)
 - **errorRecovery**: Configure error handling and retry behavior (see below)
+- **qualityRules**: Apply different quality settings per image (see below)
 
 See [.imagerc.example](.imagerc.example) for all available options.
 
@@ -101,6 +102,40 @@ Or use command-line flags:
 - `--resume`: Resume from previous interrupted run
 - `--error-log=PATH`: Custom error log location
 - `--quiet` or `-q`: Disable progress bar and non-essential output
+
+#### Per-Image Quality Settings
+
+Apply different quality settings based on filename patterns, directories, or image dimensions:
+
+```json
+{
+  "quality": {
+    "webp": 80,
+    "avif": 80
+  },
+  "qualityRules": [
+    {
+      "pattern": "*-hero.*",
+      "quality": { "webp": 95, "avif": 90 }
+    },
+    {
+      "directory": "products/thumbnails/",
+      "quality": { "webp": 60 }
+    },
+    {
+      "minWidth": 3000,
+      "quality": { "jpeg": 95 }
+    },
+    {
+      "pattern": "*-thumb.*",
+      "directory": "gallery/",
+      "quality": { "webp": 50 }
+    }
+  ]
+}
+```
+
+Rules are applied in order of specificity - more specific rules override general ones.
 
 ### Using Optimized Images
 

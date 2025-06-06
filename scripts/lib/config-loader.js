@@ -135,6 +135,58 @@ class ConfigLoader {
         throw new Error('preserveMetadata must be a boolean or an object');
       }
     }
+    
+    // Validate quality rules
+    if (config.qualityRules !== undefined) {
+      if (!Array.isArray(config.qualityRules)) {
+        throw new Error('qualityRules must be an array');
+      }
+      
+      config.qualityRules.forEach((rule, index) => {
+        if (typeof rule !== 'object' || rule === null) {
+          throw new Error(`qualityRules[${index}] must be an object`);
+        }
+        
+        // At least one matching criteria required
+        if (!rule.pattern && !rule.directory && !rule.minWidth && !rule.minHeight && 
+            !rule.maxWidth && !rule.maxHeight) {
+          throw new Error(`qualityRules[${index}] must have at least one matching criteria`);
+        }
+        
+        // Validate pattern
+        if (rule.pattern !== undefined && typeof rule.pattern !== 'string') {
+          throw new Error(`qualityRules[${index}].pattern must be a string`);
+        }
+        
+        // Validate directory
+        if (rule.directory !== undefined && typeof rule.directory !== 'string') {
+          throw new Error(`qualityRules[${index}].directory must be a string`);
+        }
+        
+        // Validate size constraints
+        const sizeProps = ['minWidth', 'minHeight', 'maxWidth', 'maxHeight'];
+        for (const prop of sizeProps) {
+          if (rule[prop] !== undefined) {
+            if (typeof rule[prop] !== 'number' || rule[prop] <= 0) {
+              throw new Error(`qualityRules[${index}].${prop} must be a positive number`);
+            }
+          }
+        }
+        
+        // Validate quality object
+        if (!rule.quality || typeof rule.quality !== 'object') {
+          throw new Error(`qualityRules[${index}].quality must be an object`);
+        }
+        
+        // Validate quality values
+        for (const format in rule.quality) {
+          const value = rule.quality[format];
+          if (typeof value !== 'number' || value < 1 || value > 100) {
+            throw new Error(`qualityRules[${index}].quality.${format} must be between 1 and 100`);
+          }
+        }
+      });
+    }
   }
   
   mergeConfigs(defaults, fileConfig, cliArgs) {

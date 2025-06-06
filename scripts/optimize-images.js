@@ -4,6 +4,7 @@ const path = require('path');
 const ConfigLoader = require('./lib/config-loader');
 const ErrorRecoveryManager = require('./lib/error-recovery-manager');
 const ProgressManager = require('./lib/progress-manager');
+const QualityRulesEngine = require('./lib/quality-rules-engine');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -74,71 +75,84 @@ function applyMetadataSettings(sharpInstance, config) {
   return sharpInstance;
 }
 
-async function getOutputPaths(filename) {
-  const name = path.parse(filename).name;
-  const ext = path.parse(filename).ext.toLowerCase();
+async function getOutputPaths(relativePath) {
+  const dir = path.dirname(relativePath);
+  const basename = path.basename(relativePath);
+  const name = path.parse(basename).name;
+  const ext = path.parse(basename).ext.toLowerCase();
   const paths = [];
   
   // Generate paths based on configured formats
   if (config.formats.includes('webp')) {
-    paths.push(path.join(config.outputDir, `${name}.webp`));
+    paths.push(path.join(config.outputDir, dir, `${name}.webp`));
   }
   
   if (config.formats.includes('avif')) {
-    paths.push(path.join(config.outputDir, `${name}.avif`));
+    paths.push(path.join(config.outputDir, dir, `${name}.avif`));
   }
   
   if (config.formats.includes('original') || 
       config.formats.includes('jpeg') || 
       config.formats.includes('png')) {
     if (ext === '.gif' || ext === '.webp') {
-      paths.push(path.join(config.outputDir, filename));
+      paths.push(path.join(config.outputDir, relativePath));
     } else if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') {
-      paths.push(path.join(config.outputDir, filename));
+      paths.push(path.join(config.outputDir, relativePath));
     }
   }
   
   if (config.generateThumbnails && !noThumbnails && 
       (config.formats.includes('webp') || config.formats.includes('avif'))) {
-    paths.push(path.join(config.outputDir, `${name}-thumb.webp`));
+    paths.push(path.join(config.outputDir, dir, `${name}-thumb.webp`));
   }
   
   return paths;
 }
 
-async function optimizeImage(inputPath, filename) {
-  const name = path.parse(filename).name;
-  const ext = path.parse(filename).ext.toLowerCase();
+async function optimizeImage(inputPath, relativePath, imageQuality = null) {
+  const dir = path.dirname(relativePath);
+  const basename = path.basename(relativePath);
+  const name = path.parse(basename).name;
+  const ext = path.parse(basename).ext.toLowerCase();
+  
+  // Use provided quality or fall back to config
+  const quality = imageQuality || config.quality;
   
   // Check for Git LFS pointer
   if (await isGitLfsPointer(inputPath)) {
     if (pullLfs) {
-      console.log(`📥 Pulling LFS file: ${filename}`);
+      console.log(`📥 Pulling LFS file: ${relativePath}`);
       const { execSync } = require('child_process');
       try {
-        execSync(`git lfs pull --include="${filename}"`, { 
-          cwd: path.dirname(inputPath),
+        execSync(`git lfs pull --include="${relativePath}"`, { 
+          cwd: 'original',
           stdio: 'inherit' 
         });
         
         // Check again after pull
         if (await isGitLfsPointer(inputPath)) {
-          console.error(`❌ Failed to pull LFS file: ${filename}`);
+          console.error(`❌ Failed to pull LFS file: ${relativePath}`);
           return 'lfs-error';
         }
       } catch (error) {
-        console.error(`❌ Error pulling LFS file: ${filename} - ${error.message}`);
+        console.error(`❌ Error pulling LFS file: ${relativePath} - ${error.message}`);
         return 'lfs-error';
       }
     } else {
       if (!quietMode) {
-        console.log(`⚠️  Skipping ${filename} (Git LFS pointer file - use --pull-lfs flag or run 'git lfs pull')`);
+        console.log(`⚠️  Skipping ${relativePath} (Git LFS pointer file - use --pull-lfs flag or run 'git lfs pull')`);
       }
       return 'lfs-pointer';
     }
   }
 
-  const outputPaths = await getOutputPaths(filename);
+  // Ensure output subdirectory exists
+  const outputSubdir = path.join(config.outputDir, dir);
+  if (dir !== '.') {
+    await fs.mkdir(outputSubdir, { recursive: true });
+  }
+  
+  const outputPaths = await getOutputPaths(relativePath);
   
   // Check if processing is needed
   const needsProcessing = await shouldProcessImage(inputPath, outputPaths);
@@ -153,7 +167,7 @@ async function optimizeImage(inputPath, filename) {
   try {
     // Handle GIF files - just copy them
     if (ext === '.gif') {
-      await fs.copyFile(inputPath, path.join(config.outputDir, filename));
+      await fs.copyFile(inputPath, path.join(config.outputDir, relativePath));
       if (!quietMode) {
         // Progress bar will show the status
       }
@@ -174,8 +188,8 @@ async function optimizeImage(inputPath, filename) {
               }),
             config
           )
-          .webp({ quality: config.quality.webp })
-          .toFile(path.join(config.outputDir, filename))
+          .webp({ quality: quality.webp })
+          .toFile(path.join(config.outputDir, relativePath))
         );
       }
       
@@ -186,8 +200,8 @@ async function optimizeImage(inputPath, filename) {
               fit: 'cover',
               position: 'centre'
             })
-            .webp({ quality: config.quality.webp })
-            .toFile(path.join(config.outputDir, `${name}-thumb.webp`))
+            .webp({ quality: quality.webp })
+            .toFile(path.join(outputSubdir, `${name}-thumb.webp`))
         );
       }
       
@@ -200,12 +214,12 @@ async function optimizeImage(inputPath, filename) {
         try {
           await sharp(outputPath).metadata();
         } catch (validationError) {
-          console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
+          console.error(`❌ Validation failed for ${relativePath}: ${validationError.message}`);
           return 'error';
         }
       }
       
-      console.log(`✅ Optimized ${filename}`);
+      console.log(`✅ Optimized ${relativePath}`);
       return 'processed';
     }
 
@@ -225,8 +239,8 @@ async function optimizeImage(inputPath, filename) {
             }),
           config
         )
-          [isJpeg ? 'jpeg' : 'png'](isJpeg ? { quality: config.quality.jpeg } : {})
-          .toFile(path.join(config.outputDir, filename))
+          [isJpeg ? 'jpeg' : 'png'](isJpeg ? { quality: quality.jpeg } : {})
+          .toFile(path.join(config.outputDir, relativePath))
       );
     }
     
@@ -240,8 +254,8 @@ async function optimizeImage(inputPath, filename) {
             }),
           config
         )
-        .avif({ quality: config.quality.avif })
-        .toFile(path.join(config.outputDir, `${name}.avif`))
+        .avif({ quality: quality.avif })
+        .toFile(path.join(outputSubdir, `${name}.avif`))
       );
     }
     
@@ -255,8 +269,8 @@ async function optimizeImage(inputPath, filename) {
             }),
           config
         )
-        .webp({ quality: config.quality.webp })
-        .toFile(path.join(config.outputDir, `${name}.webp`))
+        .webp({ quality: quality.webp })
+        .toFile(path.join(outputSubdir, `${name}.webp`))
       );
     }
     
@@ -268,8 +282,8 @@ async function optimizeImage(inputPath, filename) {
             fit: 'cover',
             position: 'centre'
           })
-          .webp({ quality: config.quality.webp })
-          .toFile(path.join(config.outputDir, `${name}-thumb.webp`))
+          .webp({ quality: quality.webp })
+          .toFile(path.join(outputSubdir, `${name}-thumb.webp`))
       );
     }
     
@@ -282,7 +296,7 @@ async function optimizeImage(inputPath, filename) {
       try {
         await sharp(outputPath).metadata();
       } catch (validationError) {
-        console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
+        console.error(`❌ Validation failed for ${relativePath}: ${validationError.message}`);
         return 'error';
       }
     }
@@ -293,7 +307,7 @@ async function optimizeImage(inputPath, filename) {
     return 'processed';
   } catch (error) {
     if (!quietMode) {
-      console.error(`❌ Error processing ${filename}: ${error.message}`);
+      console.error(`❌ Error processing ${relativePath}: ${error.message}`);
     }
     return 'error';
   }
@@ -384,21 +398,41 @@ async function main() {
           exponentialBackoff: config.errorRecovery.exponentialBackoff ?? errorRecovery.exponentialBackoff
         });
       }
+    
     } catch (error) {
       console.error(`❌ Configuration error: ${error.message}`);
       process.exit(1);
     }
     
+    // Initialize quality rules engine
+    const qualityRules = new QualityRulesEngine(config.qualityRules || []);
+    
     // Ensure directories exist
     await fs.mkdir('original', { recursive: true });
     await fs.mkdir(config.outputDir, { recursive: true });
 
-    // Get list of images to process
-    const files = await fs.readdir('original');
-    const imageFiles = files.filter(file => {
-      const ext = path.extname(file).toLowerCase();
-      return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
-    });
+    // Get list of images to process recursively
+    async function getImagesRecursively(dir, baseDir = dir) {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      const files = [];
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          files.push(...await getImagesRecursively(fullPath, baseDir));
+        } else {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+            // Store relative path from baseDir
+            files.push(path.relative(baseDir, fullPath));
+          }
+        }
+      }
+      
+      return files;
+    }
+    
+    const imageFiles = await getImagesRecursively('original');
 
     if (imageFiles.length === 0) {
       console.log('No images found in the original/ directory');
@@ -466,10 +500,33 @@ async function main() {
       // Update progress to show current file
       progress.setFilename(file);
       
+      // Get image metadata for quality rules
+      let metadata = null;
+      try {
+        metadata = await sharp(inputPath).metadata();
+      } catch (err) {
+        // If we can't read metadata, quality rules based on size won't apply
+      }
+      
+      // Get quality settings for this specific image
+      const imageQuality = qualityRules.getQualityForImage(file, metadata, config.quality);
+      
+      // Log if custom quality is being used (debug)
+      if (JSON.stringify(imageQuality) !== JSON.stringify(config.quality) && !quietMode) {
+        const matches = qualityRules.explainMatch(file, metadata);
+        if (matches.length > 0) {
+          console.log(`🎨 Applying custom quality for ${file}:`);
+          matches.forEach(match => {
+            console.log(`  - Rule: ${match.criteria}`);
+            console.log(`    Quality: ${JSON.stringify(match.quality)}`);
+          });
+        }
+      }
+      
       // Wrap the optimization in error recovery
       const { success, result: optimizationResult, attempts } = await errorRecovery.processWithRecovery(
         async () => {
-          const result = await optimizeImage(inputPath, file);
+          const result = await optimizeImage(inputPath, file, imageQuality);
           if (result === 'error' || result === 'lfs-error') {
             throw new Error(`Optimization failed with result: ${result}`);
           }
