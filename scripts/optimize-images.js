@@ -48,6 +48,17 @@ async function isGitLfsPointer(filePath) {
   }
 }
 
+function applyMetadataSettings(sharpInstance, config) {
+  if (config.preserveMetadata === true) {
+    return sharpInstance.withMetadata();
+  } else if (typeof config.preserveMetadata === 'object') {
+    // TODO: Implement selective preservation
+    return sharpInstance.withMetadata();
+  }
+  // Default: strip metadata (Sharp's default behavior)
+  return sharpInstance;
+}
+
 async function getOutputPaths(filename) {
   const name = path.parse(filename).name;
   const ext = path.parse(filename).ext.toLowerCase();
@@ -134,13 +145,16 @@ async function optimizeImage(inputPath, filename) {
       
       if (config.formats.includes('webp') || config.formats.includes('original')) {
         tasks.push(
-          sharp(inputPath)
-            .resize(2000, 2000, {
-              fit: 'inside',
-              withoutEnlargement: true
-            })
-            .webp({ quality: config.quality.webp })
-            .toFile(path.join(config.outputDir, filename))
+          applyMetadataSettings(
+            sharp(inputPath)
+              .resize(2000, 2000, {
+                fit: 'inside',
+                withoutEnlargement: true
+              }),
+            config
+          )
+          .webp({ quality: config.quality.webp })
+          .toFile(path.join(config.outputDir, filename))
         );
       }
       
@@ -182,11 +196,14 @@ async function optimizeImage(inputPath, filename) {
         ((ext === '.jpg' || ext === '.jpeg') && config.formats.includes('jpeg'))) {
       const isJpeg = ext === '.jpg' || ext === '.jpeg';
       tasks.push(
-        sharp(inputPath)
-          .resize(2000, 2000, {
-            fit: 'inside',
-            withoutEnlargement: true
-          })
+        applyMetadataSettings(
+          sharp(inputPath)
+            .resize(2000, 2000, {
+              fit: 'inside',
+              withoutEnlargement: true
+            }),
+          config
+        )
           [isJpeg ? 'jpeg' : 'png'](isJpeg ? { quality: config.quality.jpeg } : {})
           .toFile(path.join(config.outputDir, filename))
       );
@@ -194,25 +211,31 @@ async function optimizeImage(inputPath, filename) {
     
     if (config.formats.includes('avif')) {
       tasks.push(
-        sharp(inputPath)
-          .resize(2000, 2000, {
-            fit: 'inside',
-            withoutEnlargement: true
-          })
-          .avif({ quality: config.quality.avif })
-          .toFile(path.join(config.outputDir, `${name}.avif`))
+        applyMetadataSettings(
+          sharp(inputPath)
+            .resize(2000, 2000, {
+              fit: 'inside',
+              withoutEnlargement: true
+            }),
+          config
+        )
+        .avif({ quality: config.quality.avif })
+        .toFile(path.join(config.outputDir, `${name}.avif`))
       );
     }
     
     if (config.formats.includes('webp')) {
       tasks.push(
-        sharp(inputPath)
-          .resize(2000, 2000, {
-            fit: 'inside',
-            withoutEnlargement: true
-          })
-          .webp({ quality: config.quality.webp })
-          .toFile(path.join(config.outputDir, `${name}.webp`))
+        applyMetadataSettings(
+          sharp(inputPath)
+            .resize(2000, 2000, {
+              fit: 'inside',
+              withoutEnlargement: true
+            }),
+          config
+        )
+        .webp({ quality: config.quality.webp })
+        .toFile(path.join(config.outputDir, `${name}.webp`))
       );
     }
     

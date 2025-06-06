@@ -115,6 +115,26 @@ class ConfigLoader {
         throw new Error('Output directory cannot be empty');
       }
     }
+    
+    // Validate metadata preservation
+    if (config.preserveMetadata !== undefined) {
+      if (typeof config.preserveMetadata === 'boolean') {
+        // Valid boolean
+      } else if (typeof config.preserveMetadata === 'object' && config.preserveMetadata !== null) {
+        // Validate object fields
+        const validFields = ['copyright', 'creator', 'datetime', 'camera', 'gps', 'all'];
+        for (const key in config.preserveMetadata) {
+          if (!validFields.includes(key)) {
+            throw new Error(`Invalid metadata field: ${key}. Valid fields are: ${validFields.join(', ')}`);
+          }
+          if (typeof config.preserveMetadata[key] !== 'boolean') {
+            throw new Error(`Metadata field ${key} must be a boolean`);
+          }
+        }
+      } else {
+        throw new Error('preserveMetadata must be a boolean or an object');
+      }
+    }
   }
   
   mergeConfigs(defaults, fileConfig, cliArgs) {

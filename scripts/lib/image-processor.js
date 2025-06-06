@@ -1,14 +1,26 @@
 class ImageProcessor {
-  constructor(sharp) {
+  constructor(sharp, config = {}) {
     this.sharp = sharp;
+    this.config = config;
   }
 
   async processImage(inputPath, outputConfigs) {
-    const image = this.sharp(inputPath)
-      .rotate()
-      .withMetadata({
-        exif: {}
-      });
+    // Create base image processor
+    let image = this.sharp(inputPath).rotate();
+    
+    // Apply metadata configuration
+    if (this.config.preserveMetadata === false) {
+      // Don't add withMetadata - Sharp strips by default
+    } else if (this.config.preserveMetadata === true) {
+      // Preserve all metadata
+      image = image.withMetadata();
+    } else if (typeof this.config.preserveMetadata === 'object') {
+      // Selective preservation - for now, treat as preserve all
+      // TODO: Implement selective preservation
+      image = image.withMetadata();
+    } else {
+      // Default behavior - strip metadata
+    }
 
     const results = [];
     
@@ -19,7 +31,7 @@ class ImageProcessor {
         if (config.resize) {
           processor.resize(config.resize.width, config.resize.height, {
             withoutEnlargement: true,
-            fit: 'inside'
+            fit: config.resize.fit || 'inside'
           });
         }
 
