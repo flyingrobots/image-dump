@@ -1,188 +1,208 @@
-# Configuration System Feature Specification
+# Feature: Configuration System
+
+**Status**: 🚧 In Progress  
+**Priority**: 🔴 High  
+**Milestone**: Phase 3 - Configuration & Customization  
+**Issue**: #[TBD]
 
 ## Overview
-
-The configuration system allows users to customize image optimization behavior through a `.imagerc` configuration file. This enables project-specific settings without modifying code or using command-line arguments for every operation.
-
-## Use Cases
-
-1. **Different Projects, Different Needs**
-   - A photography portfolio needs high-quality WebP at 95% quality
-   - A blog wants smaller files with 80% quality
-   - An e-commerce site needs specific thumbnail sizes
-
-2. **Team Consistency**
-   - All team members use the same optimization settings
-   - Configuration is version-controlled with the project
-   - No need to remember command-line flags
-
-3. **Format Control**
-   - Some projects only need WebP, not AVIF
-   - Mobile apps might want smaller format subset
-   - Legacy browsers need JPEG fallbacks
-
-4. **Directory Organization**
-   - Custom output directory structures
-   - Different paths for different image types
-   - Separate thumbnail directories
+Enable customization of image optimization settings through a `.imagerc` configuration file, allowing project-specific settings without code modifications or repetitive command-line arguments.
 
 ## User Stories
 
-### As a developer
-- I want to configure optimization settings once so that I don't need to specify them every time
-- I want to exclude certain formats so that I don't generate files I won't use
-- I want to set custom quality levels so that I can balance file size and visual quality
+### Story 1: Developer - Project Configuration
+**As a** developer  
+**I want** to configure optimization settings in a file  
+**So that** I don't need to specify them with CLI flags every time
 
-### As a team lead
-- I want to enforce consistent settings across the team so that all images are optimized the same way
-- I want to version control our optimization settings so that they're part of the project
+**Acceptance Criteria:**
+- [ ] Can create `.imagerc` file in project root
+- [ ] Settings from file are automatically applied
+- [ ] CLI arguments override file settings
+- [ ] Works without config file (uses defaults)
 
-### As a designer
-- I want to preserve metadata in some images so that copyright information is retained
-- I want different quality settings for different image types so that photos and graphics are optimized appropriately
+### Story 2: Team Lead - Consistent Settings
+**As a** team lead  
+**I want** to version control optimization settings  
+**So that** all team members use the same configuration
 
-## Requirements
+**Acceptance Criteria:**
+- [ ] Configuration file can be committed to git
+- [ ] All developers get same optimization results
+- [ ] Clear documentation on configuration options
+- [ ] Validation prevents invalid configurations
 
-### Functional Requirements
+### Story 3: Designer - Quality Control
+**As a** designer  
+**I want** to set different quality levels for different formats  
+**So that** I can balance file size and visual quality appropriately
 
-1. **Configuration File**
-   - Support `.imagerc` (JSON format) in project root
-   - Support `.imagerc.json` as alternative name
-   - Configuration is optional (defaults still work)
+**Acceptance Criteria:**
+- [ ] Can set per-format quality (WebP, AVIF, JPEG)
+- [ ] Can disable specific formats
+- [ ] Can control thumbnail generation
+- [ ] Can preserve/strip metadata
 
-2. **Configurable Settings**
-   - Output formats (which formats to generate)
-   - Quality settings (per-format quality levels)
-   - Output directory path
-   - Thumbnail generation (enabled/disabled)
-   - Thumbnail size
-   - Metadata preservation (keep/strip EXIF)
+## Technical Specification
 
-3. **Configuration Loading**
-   - Load from project root automatically
-   - Command-line arguments override config file
-   - Validate configuration on load
-   - Clear error messages for invalid config
+### Architecture
+The configuration system will be implemented as a separate module that loads and validates settings before the optimization process begins. It follows a layered approach:
+1. Configuration loader (reads and parses)
+2. Configuration validator (ensures valid values)
+3. Configuration merger (combines defaults, file, and CLI args)
 
-4. **Backwards Compatibility**
-   - Existing projects work without configuration
-   - All current defaults are maintained
-   - No breaking changes to CLI
+### Components
+- **ConfigLoader**: Reads and parses `.imagerc` file
+- **ConfigValidator**: Validates configuration against schema
+- **ConfigMerger**: Merges defaults, file config, and CLI overrides
+- **ConfigSchema**: Defines valid configuration structure
 
-### Non-Functional Requirements
+### API Design
+```javascript
+// lib/config-loader.js
+class ConfigLoader {
+  async loadConfig(projectRoot = process.cwd()) {
+    // Returns merged configuration object
+  }
+  
+  validateConfig(config) {
+    // Throws ConfigValidationError if invalid
+  }
+  
+  mergeConfigs(defaults, fileConfig, cliArgs) {
+    // Returns merged configuration
+  }
+}
 
-1. **Performance**
-   - Configuration loading < 10ms
-   - No impact on optimization performance
-
-2. **Usability**
-   - Clear documentation with examples
-   - Helpful validation error messages
-   - Type-safe configuration schema
-
-3. **Maintainability**
-   - Single responsibility for config module
-   - Easy to add new configuration options
-   - Well-tested configuration logic
-
-## Acceptance Criteria / Definition of Done
-
-### Configuration Loading
-- [ ] `.imagerc` file is detected and loaded from project root
-- [ ] JSON parsing errors show helpful messages with line numbers
-- [ ] Invalid configuration keys show warnings but don't fail
-- [ ] Missing configuration file uses all defaults
-- [ ] Configuration can be loaded from custom path via CLI flag
-
-### Configuration Options
-- [ ] `formats` array controls which output formats are generated
-- [ ] `quality` object sets per-format quality (webp, avif, jpeg)
-- [ ] `outputDir` sets custom output directory
-- [ ] `generateThumbnails` boolean controls thumbnail generation
-- [ ] `thumbnailWidth` sets thumbnail size
-- [ ] `preserveMetadata` controls EXIF data handling
-
-### Override Behavior
-- [ ] CLI flags override config file values
-- [ ] Environment variables override config file (if applicable)
-- [ ] Override precedence is documented
-
-### Validation
-- [ ] Quality values must be 1-100
-- [ ] Formats must be from allowed list
-- [ ] Output directory is validated as writable
-- [ ] Invalid values show clear error messages
-
-### Testing
-- [ ] Unit tests cover all configuration options
-- [ ] Integration tests verify config + CLI interaction
-- [ ] End-to-end tests confirm optimization uses config
-- [ ] Error cases are tested (invalid JSON, bad values)
-
-## Test Plan
-
-### Unit Tests (`tests/lib/config-loader.test.js`)
-1. **Loading behavior**
-   - Loads valid configuration file
-   - Returns defaults when no config exists
-   - Handles invalid JSON gracefully
-   - Handles missing file gracefully
-
-2. **Validation**
-   - Validates quality ranges (1-100)
-   - Validates format strings
-   - Validates required fields
-   - Provides helpful error messages
-
-3. **Merging**
-   - Merges partial config with defaults
-   - CLI args override config values
-   - Deep merges nested objects correctly
-
-### Integration Tests (`tests/lib/config-integration.test.js`)
-1. **File system interaction**
-   - Finds .imagerc in project root
-   - Handles permission errors gracefully
-   - Works with .imagerc.json alternative
-
-2. **Configuration usage**
-   - Image optimizer uses loaded config
-   - Thumbnail generation respects config
-   - Output paths follow configuration
-
-### End-to-End Tests (`tests/config-e2e.test.js`)
-1. **Full optimization flow**
-   - Create .imagerc file
-   - Run optimization
-   - Verify outputs match configuration
-   - Verify formats match configuration
-   - Verify quality settings applied
-
-2. **Override scenarios**
-   - Config file + CLI flags
-   - Missing config with CLI flags
-   - Invalid config with defaults
-
-## Example Configuration
-
-```json
+// Configuration object structure
 {
-  "formats": ["webp", "original"],
-  "quality": {
-    "webp": 85,
-    "avif": 80,
-    "jpeg": 90
+  formats: ['webp', 'avif', 'original'],
+  quality: {
+    webp: 80,
+    avif: 80,
+    jpeg: 80
   },
-  "outputDir": "optimized",
-  "generateThumbnails": true,
-  "thumbnailWidth": 200,
-  "preserveMetadata": false
+  outputDir: 'optimized',
+  generateThumbnails: true,
+  thumbnailWidth: 200,
+  preserveMetadata: false
 }
 ```
 
-## Implementation Notes
+### Data Model
+```javascript
+// Default configuration
+const DEFAULT_CONFIG = {
+  formats: ['webp', 'avif', 'original'],
+  quality: {
+    webp: 80,
+    avif: 80,
+    jpeg: 80
+  },
+  outputDir: 'optimized',
+  generateThumbnails: true,
+  thumbnailWidth: 200,
+  preserveMetadata: false
+};
 
-- Use a schema validator for robust validation
-- Consider supporting .imagerc.js for dynamic configs (future)
-- Log configuration loading in verbose mode
-- Consider supporting extends for shared configs (future)
+// Config schema for validation
+const CONFIG_SCHEMA = {
+  formats: {
+    type: 'array',
+    items: ['webp', 'avif', 'original', 'jpeg', 'png'],
+    minItems: 1
+  },
+  quality: {
+    type: 'object',
+    properties: {
+      webp: { type: 'number', min: 1, max: 100 },
+      avif: { type: 'number', min: 1, max: 100 },
+      jpeg: { type: 'number', min: 1, max: 100 }
+    }
+  },
+  outputDir: { type: 'string', minLength: 1 },
+  generateThumbnails: { type: 'boolean' },
+  thumbnailWidth: { type: 'number', min: 10, max: 1000 },
+  preserveMetadata: { type: 'boolean' }
+};
+```
+
+### Dependencies
+- No external validation libraries (keep it simple)
+- Built-in `fs.promises` for file operations
+- Built-in `path` for path resolution
+- Existing project modules only
+
+## Implementation Plan
+
+### Phase 1: Core Configuration Module
+- [ ] Create `lib/config-loader.js` with basic structure
+- [ ] Implement config file reading
+- [ ] Implement default configuration
+- [ ] Write unit tests for config loader
+
+### Phase 2: Validation & Merging
+- [ ] Implement configuration validation
+- [ ] Implement config merging logic
+- [ ] Add error handling with helpful messages
+- [ ] Write unit tests for validation and merging
+
+### Phase 3: Integration
+- [ ] Update `optimize-images.js` to use config loader
+- [ ] Update CLI argument parsing to work with config
+- [ ] Update other modules to use config values
+- [ ] Write integration tests
+
+### Phase 4: Testing & Documentation
+- [ ] Write end-to-end tests
+- [ ] Update README with configuration docs
+- [ ] Add example `.imagerc` to project
+- [ ] Test with various configurations
+
+## Test Plan
+
+### Unit Tests
+- **Config Loading**: Test file reading, parsing, missing files
+- **Validation**: Test valid/invalid values, helpful error messages
+- **Merging**: Test defaults, overrides, deep merging
+- **Error Handling**: Test malformed JSON, permission errors
+
+### Integration Tests
+- **File Discovery**: Test finding .imagerc in project root
+- **Module Integration**: Test config usage in image optimizer
+- **CLI Integration**: Test CLI args override file config
+
+### E2E Tests
+- **Full Optimization**: Create config, run optimization, verify output
+- **Format Selection**: Test with subset of formats
+- **Quality Settings**: Verify quality settings are applied
+- **Directory Configuration**: Test custom output directory
+
+## Security Considerations
+- **Path Traversal**: Validate outputDir doesn't escape project
+- **JSON Parsing**: Handle malformed JSON safely
+- **File Permissions**: Handle read permission errors gracefully
+- **Resource Limits**: Validate numeric values are within safe ranges
+
+## Performance Considerations
+- **Caching**: Cache loaded configuration during execution
+- **Lazy Loading**: Only load config when needed
+- **Minimal Dependencies**: No heavy external libraries
+- **Fast Validation**: Simple schema validation without regex
+
+## Documentation Requirements
+- **README Update**: Add configuration section
+- **Example File**: Provide documented `.imagerc.example`
+- **Migration Guide**: How to move from CLI flags to config
+- **API Documentation**: Document config structure
+
+## Open Questions
+- [ ] Should we support `.imagerc.js` for dynamic configuration?
+- [ ] Should we support extending shared configurations?
+- [ ] Should environment variables override config?
+- [ ] Should we add config validation CLI command?
+
+## References
+- [ESLint Configuration](https://eslint.org/docs/user-guide/configuring/)
+- [Prettier Configuration](https://prettier.io/docs/en/configuration.html)
+- [Node.js Best Practices](https://github.com/goldbergyoni/nodebestpractices#-33-start-a-codeblock%E2%80%99s-curly-braces-on-the-same-line)
