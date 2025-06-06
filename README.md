@@ -48,6 +48,95 @@ make optimize-force
 make test
 ```
 
+### Configuration
+
+Create a `.imagerc` file in your project root to customize optimization settings:
+
+```json
+{
+  "formats": ["webp", "avif", "original"],
+  "quality": {
+    "webp": 85,
+    "avif": 80,
+    "jpeg": 90
+  },
+  "outputDir": "optimized",
+  "generateThumbnails": true,
+  "thumbnailWidth": 200,
+  "preserveMetadata": false
+}
+```
+
+#### Configuration Options
+
+- **formats**: Array of output formats (`webp`, `avif`, `original`, `jpeg`, `png`)
+- **quality**: Quality settings for each format (1-100)
+- **outputDir**: Where to save optimized images
+- **generateThumbnails**: Create thumbnail versions
+- **thumbnailWidth**: Thumbnail size in pixels
+- **preserveMetadata**: Keep EXIF/metadata (`true`) or strip it (`false`, default)
+- **errorRecovery**: Configure error handling and retry behavior (see below)
+- **qualityRules**: Apply different quality settings per image (see below)
+
+See [.imagerc.example](.imagerc.example) for all available options.
+
+#### Error Recovery Configuration
+
+Configure error recovery in your `.imagerc`:
+
+```json
+{
+  "errorRecovery": {
+    "continueOnError": true,
+    "maxRetries": 3,
+    "retryDelay": 1000,
+    "exponentialBackoff": true
+  }
+}
+```
+
+Or use command-line flags:
+- `--continue-on-error`: Continue processing after failures
+- `--max-retries=3`: Number of retry attempts (default: 3)
+- `--retry-delay=1000`: Initial retry delay in ms (default: 1000)
+- `--resume`: Resume from previous interrupted run
+- `--error-log=PATH`: Custom error log location
+- `--quiet` or `-q`: Disable progress bar and non-essential output
+
+#### Per-Image Quality Settings
+
+Apply different quality settings based on filename patterns, directories, or image dimensions:
+
+```json
+{
+  "quality": {
+    "webp": 80,
+    "avif": 80
+  },
+  "qualityRules": [
+    {
+      "pattern": "*-hero.*",
+      "quality": { "webp": 95, "avif": 90 }
+    },
+    {
+      "directory": "products/thumbnails/",
+      "quality": { "webp": 60 }
+    },
+    {
+      "minWidth": 3000,
+      "quality": { "jpeg": 95 }
+    },
+    {
+      "pattern": "*-thumb.*",
+      "directory": "gallery/",
+      "quality": { "webp": 50 }
+    }
+  ]
+}
+```
+
+Rules are applied in order of specificity - more specific rules override general ones.
+
 ### Using Optimized Images
 
 ```markdown

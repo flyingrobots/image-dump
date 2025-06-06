@@ -1,0 +1,57 @@
+{
+  "formats": ["webp", "avif", "original"],
+  "quality": {
+    "webp": 80,
+    "avif": 80,
+    "jpeg": 80
+  },
+  "outputDir": "optimized",
+  "generateThumbnails": true,
+  "thumbnailWidth": 200,
+  "preserveMetadata": false
+}
+
+// Metadata preservation examples:
+// 
+// Strip all metadata (default):
+// "preserveMetadata": false
+//
+// Preserve all metadata:
+// "preserveMetadata": true
+//
+// Selective preservation (coming soon):
+// "preserveMetadata": {
+//   "copyright": true,
+//   "gps": false
+// }
+//
+// Error recovery configuration:
+// "errorRecovery": {
+//   "continueOnError": true,      // Continue after failures
+//   "maxRetries": 3,              // Retry attempts for transient errors
+//   "retryDelay": 1000,           // Initial retry delay (ms)
+//   "exponentialBackoff": true,   // Use exponential backoff
+//   "errorLog": "errors.log"      // Custom error log path
+// }
+//
+// Per-image quality rules:
+// "qualityRules": [
+//   {
+//     "pattern": "*-hero.*",         // Match hero images
+//     "quality": { "webp": 95 }
+//   },
+//   {
+//     "directory": "products/",      // Match files in products directory
+//     "quality": { "webp": 70 }
+//   },
+//   {
+//     "minWidth": 3000,              // Match high-resolution images
+//     "quality": { "jpeg": 95 }
+//   },
+//   {
+//     "pattern": "*-thumb.*",        // Combine multiple criteria
+//     "directory": "gallery/",
+//     "maxWidth": 500,
+//     "quality": { "webp": 50 }
+//   }
+// ]

@@ -31,11 +31,12 @@ This document outlines the development phases and planned features for the Image
 **Status**: In Progress  
 **Goal**: Flexible configuration options
 
-- [ ] Config file support (.imagerc)
+- [x] Config file support (.imagerc)
+- [x] Per-format quality settings
+- [x] Custom output paths
+- [x] Format selection options
 - [ ] Per-image quality settings
-- [ ] Custom output paths
-- [ ] Format selection options
-- [ ] Metadata preservation options
+- [x] Metadata preservation options ✅
 - [ ] Batch processing progress bar
 - [ ] Error recovery mechanisms
 
