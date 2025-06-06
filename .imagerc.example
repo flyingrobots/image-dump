@@ -10,3 +10,17 @@
   "thumbnailWidth": 200,
   "preserveMetadata": false
 }
+
+// Metadata preservation examples:
+// 
+// Strip all metadata (default):
+// "preserveMetadata": false
+//
+// Preserve all metadata:
+// "preserveMetadata": true
+//
+// Selective preservation (coming soon):
+// "preserveMetadata": {
+//   "copyright": true,
+//   "gps": false
+// }

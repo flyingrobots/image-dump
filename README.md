@@ -67,6 +67,15 @@ Create a `.imagerc` file in your project root to customize optimization settings
 }
 ```
 
+#### Configuration Options
+
+- **formats**: Array of output formats (`webp`, `avif`, `original`, `jpeg`, `png`)
+- **quality**: Quality settings for each format (1-100)
+- **outputDir**: Where to save optimized images
+- **generateThumbnails**: Create thumbnail versions
+- **thumbnailWidth**: Thumbnail size in pixels
+- **preserveMetadata**: Keep EXIF/metadata (`true`) or strip it (`false`, default)
+
 See [.imagerc.example](.imagerc.example) for all available options.
 
 ### Using Optimized Images
