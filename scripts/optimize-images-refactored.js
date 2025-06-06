@@ -4,12 +4,12 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 // Import our modules
-const GitLfsDetector = require('./lib/git-lfs-detector');
-const GitLfsPuller = require('./lib/git-lfs-puller');
-const FileTimestampChecker = require('./lib/file-timestamp-checker');
-const ImageProcessor = require('./lib/image-processor');
-const OutputPathGenerator = require('./lib/output-path-generator');
-const ImageOptimizer = require('./lib/image-optimizer');
+const GitLfsDetector = require('../src/git-lfs-detector');
+const GitLfsPuller = require('../src/git-lfs-puller');
+const FileTimestampChecker = require('../src/file-timestamp-checker');
+const ImageProcessor = require('../src/image-processor');
+const OutputPathGenerator = require('../src/output-path-generator');
+const ImageOptimizer = require('../src/image-optimizer');
 
 const INPUT_DIR = 'original';
 const OUTPUT_DIR = 'optimized';

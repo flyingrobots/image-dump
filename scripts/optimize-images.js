@@ -1,10 +1,10 @@
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
-const ConfigLoader = require('./lib/config-loader');
-const ErrorRecoveryManager = require('./lib/error-recovery-manager');
-const ProgressManager = require('./lib/progress-manager');
-const QualityRulesEngine = require('./lib/quality-rules-engine');
+const ConfigLoader = require('../src/config-loader');
+const ErrorRecoveryManager = require('../src/error-recovery-manager');
+const ProgressManager = require('../src/progress-manager');
+const QualityRulesEngine = require('../src/quality-rules-engine');
 
 // Parse command line arguments
 const args = process.argv.slice(2);

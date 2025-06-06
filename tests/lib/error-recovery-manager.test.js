@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
-const ErrorRecoveryManager = require('../../scripts/lib/error-recovery-manager');
+const ErrorRecoveryManager = require('../../src/error-recovery-manager');
 
 describe('ErrorRecoveryManager', () => {
   let errorManager;

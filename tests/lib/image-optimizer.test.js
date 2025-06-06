@@ -1,4 +1,4 @@
-const ImageOptimizer = require('../../scripts/lib/image-optimizer');
+const ImageOptimizer = require('../../src/image-optimizer');
 
 describe('ImageOptimizer', () => {
   let optimizer;
