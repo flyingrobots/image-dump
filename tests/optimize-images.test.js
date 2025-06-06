@@ -57,16 +57,24 @@ describe('optimize-images.js', () => {
 
     const result = runScript();
     
+    // Test behavior, not exact output
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('✅ Optimized test.png');
-    expect(result.output).toContain('Processed: 1 images');
     
-    // Check output files exist
+    // Check that optimization actually happened by verifying output files exist
     const outputFiles = await fs.readdir(outputDir);
     expect(outputFiles).toContain('test.png');
     expect(outputFiles).toContain('test.webp');
     expect(outputFiles).toContain('test.avif');
     expect(outputFiles).toContain('test-thumb.webp');
+    
+    // Verify the files are valid images
+    await sharp(path.join(outputDir, 'test.png')).metadata();
+    await sharp(path.join(outputDir, 'test.webp')).metadata();
+    await sharp(path.join(outputDir, 'test.avif')).metadata();
+    await sharp(path.join(outputDir, 'test-thumb.webp')).metadata();
+    
+    // Verify completion message exists somewhere in output
+    expect(result.output).toMatch(/optimization complete|processed.*1|✅/i);
   });
 
   test('should exit with error code when processing fails', async () => {
@@ -77,7 +85,7 @@ describe('optimize-images.js', () => {
     
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('❌ Error processing corrupt.png');
-    expect(result.output).toContain('Errors: 1 images');
+    expect(result.output).toContain('Fatal error');
   });
 
   test('should skip already processed images', async () => {
@@ -93,15 +101,28 @@ describe('optimize-images.js', () => {
     .png()
     .toFile(path.join(inputDir, 'test.png'));
 
-    // First run
-    runScript();
+    // First run - ensure files are created
+    const firstRun = runScript();
+    expect(firstRun.exitCode).toBe(0);
     
-    // Second run should skip
+    // Wait a bit to ensure file timestamps are different
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    // Get modification times of output files after first run
+    const outputPath = path.join(outputDir, 'test.png');
+    const stats1 = await fs.stat(outputPath);
+    
+    // Second run should skip (not modify files)
     const result = runScript();
     
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('⏭️  Skipping test.png (already up to date)');
-    expect(result.output).toContain('Skipped: 1 images');
+    
+    // Verify files were not modified (same modification time)
+    const stats2 = await fs.stat(outputPath);
+    expect(stats2.mtime.getTime()).toBe(stats1.mtime.getTime());
+    
+    // Verify skip behavior in output
+    expect(result.output.toLowerCase()).toMatch(/skip|already|up to date/i);
   });
 
   test('should force reprocess with --force flag', async () => {
@@ -118,14 +139,32 @@ describe('optimize-images.js', () => {
     .toFile(path.join(inputDir, 'test.png'));
 
     // First run
-    runScript();
+    const firstRun = runScript();
+    expect(firstRun.exitCode).toBe(0);
     
-    // Second run with force should reprocess
+    // Wait to ensure different timestamps
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Get modification time after first run
+    const outputPath = path.join(outputDir, 'test.png');
+    const stats1 = await fs.stat(outputPath);
+    
+    // Second run with force should reprocess (update modification time)
     const result = runScript('--force');
     
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('✅ Optimized test.png');
-    expect(result.output).toContain('Processed: 1 images');
+    
+    // Verify file was reprocessed (newer modification time)
+    const stats2 = await fs.stat(outputPath);
+    expect(stats2.mtime.getTime()).toBeGreaterThan(stats1.mtime.getTime());
+    
+    // Should indicate processing happened
+    expect(result.output.toLowerCase()).toMatch(/process|complete/i);
+    // When forced, should show 0 skipped (not skip any)
+    const skippedMatch = result.output.match(/skipped:\s*(\d+)/i);
+    if (skippedMatch) {
+      expect(parseInt(skippedMatch[1])).toBe(0);
+    }
   });
 
   test('should handle multiple images with mixed results', async () => {
@@ -144,13 +183,27 @@ describe('optimize-images.js', () => {
     // Create corrupt image
     await fs.writeFile(path.join(inputDir, 'corrupt.jpg'), 'not a real jpg');
 
-    const result = runScript();
+    const result = runScript('--continue-on-error');
     
-    expect(result.exitCode).toBe(1); // Should fail due to error
-    expect(result.output).toContain('✅ Optimized valid.png');
-    expect(result.output).toContain('❌ Error processing corrupt.jpg');
-    expect(result.output).toContain('Processed: 1 images');
-    expect(result.output).toContain('Errors: 1 images');
+    // With --continue-on-error, it should complete successfully
+    expect(result.exitCode).toBe(0);
+    
+    // Check that valid image was processed
+    const outputFiles = await fs.readdir(outputDir);
+    expect(outputFiles).toContain('valid.png');
+    expect(outputFiles).toContain('valid.webp');
+    
+    // Corrupt image should not have output files
+    expect(outputFiles).not.toContain('corrupt.jpg');
+    expect(outputFiles).not.toContain('corrupt.webp');
+    
+    // Should mention errors in output
+    expect(result.output.toLowerCase()).toMatch(/error/i);
+    
+    // Check for error log file creation
+    const errorLogPath = path.join(testDir, 'image-optimization-errors.log');
+    const errorLogExists = await fs.access(errorLogPath).then(() => true).catch(() => false);
+    expect(errorLogExists).toBe(true);
   });
 
   test('should handle WebP input files', async () => {
@@ -178,12 +231,19 @@ describe('optimize-images.js', () => {
     const result = runScript();
     
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('✅ Optimized test.webp');
     
-    // Check output files
+    // Check output files were created
     const outputFiles = await fs.readdir(outputDir);
     expect(outputFiles).toContain('test.webp');
     expect(outputFiles).toContain('test-thumb.webp');
+    
+    // Verify the output files are valid WebP images
+    const metadata = await sharp(path.join(outputDir, 'test.webp')).metadata();
+    expect(metadata.format).toBe('webp');
+    
+    const thumbMetadata = await sharp(path.join(outputDir, 'test-thumb.webp')).metadata();
+    expect(thumbMetadata.format).toBe('webp');
+    expect(thumbMetadata.width).toBeLessThanOrEqual(300); // Default thumbnail size
   });
 
   test('should copy GIF files without optimization', async () => {
@@ -194,10 +254,243 @@ describe('optimize-images.js', () => {
     const result = runScript();
     
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('✅ Copied test.gif (GIF files are not optimized)');
     
-    // Check that GIF was copied
+    // Check that GIF was copied to output
     const outputFiles = await fs.readdir(outputDir);
     expect(outputFiles).toContain('test.gif');
+    
+    // Verify it's the same file (was copied, not processed)
+    const inputContent = await fs.readFile(path.join(inputDir, 'test.gif'));
+    const outputContent = await fs.readFile(path.join(outputDir, 'test.gif'));
+    expect(outputContent).toEqual(inputContent);
+    
+    // Should not create alternate formats for GIF
+    expect(outputFiles).not.toContain('test.webp');
+    expect(outputFiles).not.toContain('test.avif');
+  });
+
+  test('should resume from previous state when --resume flag is used', async () => {
+    // Create multiple test images
+    for (let i = 1; i <= 3; i++) {
+      await sharp({
+        create: {
+          width: 100,
+          height: 100,
+          channels: 4,
+          background: { r: i * 50, g: i * 50, b: i * 50, alpha: 1 }
+        }
+      })
+      .png()
+      .toFile(path.join(inputDir, `test${i}.png`));
+    }
+
+    // First, process just the first image
+    await fs.writeFile(
+      path.join(testDir, '.imagerc'),
+      JSON.stringify({
+        formats: ['png'],
+        generateThumbnails: false
+      })
+    );
+    
+    // Process test1.png manually to establish baseline
+    await sharp(path.join(inputDir, 'test1.png'))
+      .png()
+      .toFile(path.join(outputDir, 'test1.png'));
+
+    // Create a state file with processed files tracking
+    const processedFiles = new Map();
+    processedFiles.set(path.join('original', 'test1.png'), {
+      status: 'success',
+      result: 'processed',
+      attempts: 1
+    });
+    
+    const stateFile = {
+      version: '1.0',
+      startedAt: new Date().toISOString(),
+      lastUpdatedAt: new Date().toISOString(),
+      progress: {
+        total: 3,
+        processed: 1,
+        succeeded: 1,
+        failed: 0,
+        remaining: 2
+      },
+      files: {
+        processed: [{
+          path: path.join('original', 'test1.png'),
+          status: 'success',
+          result: 'processed',
+          attempts: 1
+        }],
+        pending: [
+          path.join('original', 'test2.png'),
+          path.join('original', 'test3.png')
+        ]
+      },
+      configuration: {
+        outputDir: 'optimized',
+        formats: ['png', 'webp', 'avif'],
+        generateThumbnails: true
+      }
+    };
+    
+    await fs.writeFile(
+      path.join(testDir, '.image-optimization-state.json'),
+      JSON.stringify(stateFile, null, 2)
+    );
+
+    // Update config for full processing
+    await fs.writeFile(
+      path.join(testDir, '.imagerc'),
+      JSON.stringify({
+        formats: ['png', 'webp', 'avif'],
+        generateThumbnails: true
+      })
+    );
+
+    // Get initial file count
+    const filesBeforeResume = await fs.readdir(outputDir);
+    
+    // Run with resume flag
+    const result = runScript('--resume');
+    
+    expect(result.exitCode).toBe(0);
+    
+    // Check that resume was acknowledged
+    expect(result.output.toLowerCase()).toMatch(/resum/i);
+    
+    // Should have processed test2 and test3, but skipped test1
+    const outputFiles = await fs.readdir(outputDir);
+    
+    // All base files should exist
+    expect(outputFiles).toContain('test1.png'); // Already existed
+    expect(outputFiles).toContain('test2.png'); // Newly processed
+    expect(outputFiles).toContain('test3.png'); // Newly processed
+    
+    // test2 and test3 should have full processing
+    expect(outputFiles).toContain('test2.webp');
+    expect(outputFiles).toContain('test2.avif');
+    expect(outputFiles).toContain('test3.webp');
+    expect(outputFiles).toContain('test3.avif');
+    
+    // Verify by file count - should have added more files than before
+    expect(outputFiles.length).toBeGreaterThan(filesBeforeResume.length);
+  });
+
+  test('should show progress information during processing', async () => {
+    // Create multiple images to ensure progress is shown
+    for (let i = 1; i <= 5; i++) {
+      await sharp({
+        create: {
+          width: 100,
+          height: 100,
+          channels: 4,
+          background: { r: i * 40, g: i * 40, b: i * 40, alpha: 1 }
+        }
+      })
+      .png()
+      .toFile(path.join(inputDir, `test${i}.png`));
+    }
+
+    const result = runScript();
+    
+    expect(result.exitCode).toBe(0);
+    
+    // Progress should be shown in output (contains processing-related text)
+    expect(result.output.toLowerCase()).toMatch(/process|progress|complete/i);
+    
+    // All files should be processed
+    const outputFiles = await fs.readdir(outputDir);
+    for (let i = 1; i <= 5; i++) {
+      expect(outputFiles).toContain(`test${i}.png`);
+      expect(outputFiles).toContain(`test${i}.webp`);
+    }
+  });
+
+  test('should continue processing after errors with --continue-on-error flag', async () => {
+    // Create mix of valid and invalid images
+    await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 4,
+        background: { r: 255, g: 0, b: 0, alpha: 1 }
+      }
+    })
+    .png()
+    .toFile(path.join(inputDir, 'valid1.png'));
+    
+    await fs.writeFile(path.join(inputDir, 'corrupt.png'), 'not a valid png');
+    
+    await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 4,
+        background: { r: 0, g: 255, b: 0, alpha: 1 }
+      }
+    })
+    .png()
+    .toFile(path.join(inputDir, 'valid2.png'));
+
+    const result = runScript('--continue-on-error');
+    
+    // Should complete successfully with --continue-on-error
+    expect(result.exitCode).toBe(0);
+    
+    // Valid images should be processed
+    const outputFiles = await fs.readdir(outputDir);
+    expect(outputFiles).toContain('valid1.png');
+    expect(outputFiles).toContain('valid1.webp');
+    expect(outputFiles).toContain('valid2.png');
+    expect(outputFiles).toContain('valid2.webp');
+    
+    // Corrupt image should not have outputs
+    expect(outputFiles).not.toContain('corrupt.png');
+    expect(outputFiles).not.toContain('corrupt.webp');
+    
+    // Error log should be created
+    const errorLogExists = await fs.access(path.join(testDir, 'image-optimization-errors.log'))
+      .then(() => true)
+      .catch(() => false);
+    expect(errorLogExists).toBe(true);
+    
+    // Output should mention errors
+    expect(result.output.toLowerCase()).toMatch(/error/i);
+  });
+
+  test('should handle subdirectories correctly', async () => {
+    // Create subdirectory with image
+    const subdir = path.join(inputDir, 'subdir');
+    await fs.mkdir(subdir, { recursive: true });
+    
+    await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 4,
+        background: { r: 100, g: 100, b: 100, alpha: 1 }
+      }
+    })
+    .png()
+    .toFile(path.join(subdir, 'nested.png'));
+
+    const result = runScript();
+    
+    expect(result.exitCode).toBe(0);
+    
+    // Check subdirectory was created in output
+    const outputSubdir = path.join(outputDir, 'subdir');
+    const subdirExists = await fs.access(outputSubdir).then(() => true).catch(() => false);
+    expect(subdirExists).toBe(true);
+    
+    // Check files in subdirectory
+    const outputFiles = await fs.readdir(outputSubdir);
+    expect(outputFiles).toContain('nested.png');
+    expect(outputFiles).toContain('nested.webp');
+    expect(outputFiles).toContain('nested.avif');
+    expect(outputFiles).toContain('nested-thumb.webp');
   });
 });

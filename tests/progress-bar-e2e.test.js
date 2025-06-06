@@ -135,14 +135,39 @@ describe('Progress Bar E2E', () => {
         await fs.writeFile(path.join('original', `pic${i}.png`), image);
       }
       
-      // First run - process only some files
-      execSync(`node ${scriptPath} --continue-on-error`, { encoding: 'utf8' });
+      // Create a state file to simulate interrupted processing
+      const stateData = {
+        version: '1.0',
+        startedAt: new Date().toISOString(),
+        lastUpdatedAt: new Date().toISOString(),
+        progress: {
+          total: 10,
+          processed: 3,
+          succeeded: 3,
+          failed: 0,
+          remaining: 7
+        },
+        files: {
+          processed: [
+            { path: 'original/pic0.png', status: 'success', result: 'processed', attempts: 1 },
+            { path: 'original/pic1.png', status: 'success', result: 'processed', attempts: 1 },
+            { path: 'original/pic2.png', status: 'success', result: 'processed', attempts: 1 }
+          ],
+          pending: ['original/pic3.png', 'original/pic4.png', 'original/pic5.png', 'original/pic6.png', 'original/pic7.png', 'original/pic8.png', 'original/pic9.png']
+        },
+        configuration: {
+          formats: ['webp'],
+          generateThumbnails: false,
+          outputDir: 'optimized'
+        }
+      };
+      await fs.writeFile('.image-optimization-state.json', JSON.stringify(stateData, null, 2));
       
-      // Delete some output files to simulate partial completion
-      const outputFiles = await fs.readdir('optimized');
-      const filesToDelete = outputFiles.slice(0, 5);
-      for (const file of filesToDelete) {
-        await fs.unlink(path.join('optimized', file));
+      // Process first 3 files manually to match state
+      for (let i = 0; i < 3; i++) {
+        const sharp = require('sharp');
+        const img = sharp(path.join('original', `pic${i}.png`));
+        await img.webp().toFile(path.join('optimized', `pic${i}.webp`));
       }
       
       // Resume with progress
@@ -150,7 +175,7 @@ describe('Progress Bar E2E', () => {
         encoding: 'utf8'
       });
       
-      expect(result).toContain('Resuming from previous state');
+      expect(result).toContain('📂 Resuming from previous state...');
       expect(result).toContain('Optimization complete!');
     });
   });

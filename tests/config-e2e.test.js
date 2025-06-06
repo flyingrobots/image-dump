@@ -65,7 +65,8 @@ describe('Configuration End-to-End', () => {
       const { output, exitCode } = runOptimizer();
       
       expect(exitCode).toBe(0);
-      expect(output).toContain('✅ Optimized test-image.png');
+      expect(output).toContain('✅ Optimization complete!');
+      expect(output).toContain('Processed: 1 images');
       
       // Verify outputs
       const outputFiles = await fs.readdir(path.join(testDir, 'optimized'));
@@ -80,7 +81,8 @@ describe('Configuration End-to-End', () => {
       const { output, exitCode } = runOptimizer();
       
       expect(exitCode).toBe(0);
-      expect(output).toContain('✅ Optimized test-image.png');
+      expect(output).toContain('✅ Optimization complete!');
+      expect(output).toContain('Processed: 1 images');
       
       // Should use defaults: all formats + thumbnail
       const outputFiles = await fs.readdir(path.join(testDir, 'optimized'));
