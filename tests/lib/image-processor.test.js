@@ -37,7 +37,8 @@ describe('ImageProcessor', () => {
       
       expect(mockSharp).toHaveBeenCalledWith('/input/image.png');
       expect(mockImage.rotate).toHaveBeenCalled();
-      expect(mockImage.withMetadata).toHaveBeenCalledWith({ exif: {} });
+      // Default behavior: metadata should be stripped (no withMetadata call)
+      expect(mockImage.withMetadata).not.toHaveBeenCalled();
       expect(mockImage.resize).toHaveBeenCalledWith(2000, 2000, {
         withoutEnlargement: true,
         fit: 'inside'
@@ -71,6 +72,19 @@ describe('ImageProcessor', () => {
       expect(results.every(r => r.success)).toBe(true);
     });
 
+    it('should preserve metadata when configured', async () => {
+      const processor = new ImageProcessor(mockSharp, { preserveMetadata: true });
+      const configs = [{
+        outputPath: '/output/image.webp',
+        format: 'webp',
+        options: { quality: 85 }
+      }];
+      
+      await processor.processImage('/input/image.png', configs);
+      
+      expect(mockImage.withMetadata).toHaveBeenCalled();
+    });
+    
     it('should handle processing errors gracefully', async () => {
       mockImage.toFile.mockRejectedValueOnce(new Error('Write failed'));
       
