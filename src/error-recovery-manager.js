@@ -11,6 +11,7 @@ class ErrorRecoveryManager {
     this.errorLog = options.errorLog || 'image-optimization-errors.log';
     this.errors = [];
     this.processedFiles = new Map();
+    this.logger = options.logger || console;
   }
 
   async processWithRecovery(operation, context) {
@@ -44,7 +45,7 @@ class ErrorRecoveryManager {
           ? this.retryDelay * Math.pow(2, attempt - 1)
           : this.retryDelay;
           
-        console.log(`Retry attempt ${attempt}/${this.maxRetries} for ${context.file} after ${delay}ms...`);
+        this.logger.log(`Retry attempt ${attempt}/${this.maxRetries} for ${context.file} after ${delay}ms...`);
         await this.sleep(delay);
       }
     }
@@ -74,7 +75,7 @@ class ErrorRecoveryManager {
       const logLine = JSON.stringify(errorEntry) + '\n';
       await fs.appendFile(this.errorLog, logLine);
     } catch (logError) {
-      console.error('Failed to write to error log:', logError.message);
+      this.logger.error('Failed to write to error log:', logError.message);
     }
   }
 
@@ -103,7 +104,7 @@ class ErrorRecoveryManager {
     try {
       await fs.writeFile(this.stateFile, JSON.stringify(stateData, null, 2));
     } catch (error) {
-      console.error('Failed to save state:', error.message);
+      this.logger.error('Failed to save state:', error.message);
     }
   }
 
@@ -114,7 +115,7 @@ class ErrorRecoveryManager {
       
       // Validate state version
       if (state.version !== '1.0') {
-        console.warn('State file version mismatch, ignoring saved state');
+        this.logger.warn('State file version mismatch, ignoring saved state');
         return null;
       }
       
@@ -134,7 +135,7 @@ class ErrorRecoveryManager {
       if (error.code === 'ENOENT') {
         return null; // No state file exists
       }
-      console.error('Failed to load state:', error.message);
+      this.logger.error('Failed to load state:', error.message);
       return null;
     }
   }
@@ -144,7 +145,7 @@ class ErrorRecoveryManager {
       await fs.unlink(this.stateFile);
     } catch (error) {
       if (error.code !== 'ENOENT') {
-        console.error('Failed to clear state:', error.message);
+        this.logger.error('Failed to clear state:', error.message);
       }
     }
   }

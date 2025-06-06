@@ -15,6 +15,9 @@ class ProgressManager {
       errors: 0
     };
     
+    // Logger injection
+    this.logger = options.logger || console;
+    
     // Custom format options
     this.showSpeed = options.showSpeed !== false;
     this.showETA = options.showETA !== false;
@@ -90,7 +93,7 @@ class ProgressManager {
     
     if (!this.isQuiet && this.isTTY && total > 0) {
       if (initialMessage) {
-        console.log(initialMessage);
+        this.logger.log(initialMessage);
       }
       
       this.bar = this.createProgressBar();
@@ -101,7 +104,7 @@ class ProgressManager {
       });
     } else if (!this.isQuiet && total > 0) {
       // Non-TTY fallback (CI environments)
-      console.log(`Processing ${total} images...`);
+      this.logger.log(`Processing ${total} images...`);
     }
   }
 
@@ -130,7 +133,7 @@ class ProgressManager {
     } else if (!this.isQuiet && !this.isTTY && current % 10 === 0) {
       // Non-TTY progress updates every 10 items
       const percentage = Math.round((current / this.total) * 100);
-      console.log(`Progress: ${current}/${this.total} (${percentage}%)`);
+      this.logger.log(`Progress: ${current}/${this.total} (${percentage}%)`);
     }
   }
 
@@ -149,7 +152,7 @@ class ProgressManager {
       this.bar.stop();
       
       if (showSummary && !this.isQuiet) {
-        console.log(''); // Empty line after progress bar
+        this.logger.log(''); // Empty line after progress bar
       }
     }
     
@@ -157,16 +160,16 @@ class ProgressManager {
       const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
       const speed = elapsed > 0 ? (this.total / elapsed).toFixed(1) : '0';
       
-      console.log(colors.green('✨ Processing complete!'));
-      console.log(`   Total: ${this.total} images in ${elapsed}s (${speed} img/s)`);
+      this.logger.log(colors.green('✨ Processing complete!'));
+      this.logger.log(`   Total: ${this.total} images in ${elapsed}s (${speed} img/s)`);
       if (this.stats.processed > 0) {
-        console.log(`   Processed: ${this.stats.processed}`);
+        this.logger.log(`   Processed: ${this.stats.processed}`);
       }
       if (this.stats.skipped > 0) {
-        console.log(`   Skipped: ${this.stats.skipped}`);
+        this.logger.log(`   Skipped: ${this.stats.skipped}`);
       }
       if (this.stats.errors > 0) {
-        console.log(colors.red(`   Errors: ${this.stats.errors}`));
+        this.logger.log(colors.red(`   Errors: ${this.stats.errors}`));
       }
     }
   }
