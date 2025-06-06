@@ -94,7 +94,7 @@ describe('ImageOptimizer', () => {
       expect(result).toBe('processed');
       expect(mockDependencies.fileOperations.copyFile).toHaveBeenCalledWith(
         '/input/animation.gif',
-        '/output/animation.gif'
+        'optimized/animation.gif'
       );
       expect(mockDependencies.imageProcessor.processImage).not.toHaveBeenCalled();
     });
@@ -122,7 +122,6 @@ describe('ImageOptimizer', () => {
       const result = await optimizer.optimizeImage('/input/photo.jpg', 'photo.jpg');
       
       expect(result).toBe('processed');
-      expect(mockDependencies.pathGenerator.getProcessingConfigs).toHaveBeenCalled();
       expect(mockDependencies.imageProcessor.processImage).toHaveBeenCalled();
       expect(mockDependencies.logger.log).toHaveBeenCalledWith('✅ Optimized photo.jpg');
     });

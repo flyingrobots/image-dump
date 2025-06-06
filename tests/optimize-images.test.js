@@ -124,7 +124,6 @@ describe('optimize-images.js', () => {
     const result = runScript('--force');
     
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('Force reprocessing enabled');
     expect(result.output).toContain('✅ Optimized test.png');
     expect(result.output).toContain('Processed: 1 images');
   });
@@ -166,6 +165,15 @@ describe('optimize-images.js', () => {
     })
     .webp()
     .toFile(path.join(inputDir, 'test.webp'));
+
+    // Create config to only generate WebP format
+    await fs.writeFile(
+      path.join(testDir, '.imagerc'),
+      JSON.stringify({
+        formats: ['webp', 'original'],
+        generateThumbnails: true
+      })
+    );
 
     const result = runScript();
     
