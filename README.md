@@ -100,6 +100,7 @@ Or use command-line flags:
 - `--retry-delay=1000`: Initial retry delay in ms (default: 1000)
 - `--resume`: Resume from previous interrupted run
 - `--error-log=PATH`: Custom error log location
+- `--quiet` or `-q`: Disable progress bar and non-essential output
 
 ### Using Optimized Images
 

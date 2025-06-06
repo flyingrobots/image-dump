@@ -3,6 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const ConfigLoader = require('./lib/config-loader');
 const ErrorRecoveryManager = require('./lib/error-recovery-manager');
+const ProgressManager = require('./lib/progress-manager');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -11,6 +12,7 @@ const pullLfs = args.includes('--pull-lfs');
 const noThumbnails = args.includes('--no-thumbnails');
 const continueOnError = args.includes('--continue-on-error');
 const resumeFlag = args.includes('--resume');
+const quietMode = args.includes('--quiet') || args.includes('-q');
 
 // Extract error recovery options
 const maxRetriesArg = args.find(arg => arg.startsWith('--max-retries='));
@@ -129,7 +131,9 @@ async function optimizeImage(inputPath, filename) {
         return 'lfs-error';
       }
     } else {
-      console.log(`⚠️  Skipping ${filename} (Git LFS pointer file - use --pull-lfs flag or run 'git lfs pull')`);
+      if (!quietMode) {
+        console.log(`⚠️  Skipping ${filename} (Git LFS pointer file - use --pull-lfs flag or run 'git lfs pull')`);
+      }
       return 'lfs-pointer';
     }
   }
@@ -140,7 +144,9 @@ async function optimizeImage(inputPath, filename) {
   const needsProcessing = await shouldProcessImage(inputPath, outputPaths);
   
   if (!needsProcessing) {
-    console.log(`⏭️  Skipping ${filename} (already up to date)`);
+    if (!quietMode) {
+      // Progress bar will show skipped status
+    }
     return 'skipped';
   }
 
@@ -148,7 +154,9 @@ async function optimizeImage(inputPath, filename) {
     // Handle GIF files - just copy them
     if (ext === '.gif') {
       await fs.copyFile(inputPath, path.join(config.outputDir, filename));
-      console.log(`✅ Copied ${filename} (GIF files are not optimized)`);
+      if (!quietMode) {
+        // Progress bar will show the status
+      }
       return 'processed';
     }
 
@@ -279,10 +287,14 @@ async function optimizeImage(inputPath, filename) {
       }
     }
     
-    console.log(`✅ Optimized ${filename}`);
+    if (!quietMode) {
+      // Progress bar will show the status
+    }
     return 'processed';
   } catch (error) {
-    console.error(`❌ Error processing ${filename}: ${error.message}`);
+    if (!quietMode) {
+      console.error(`❌ Error processing ${filename}: ${error.message}`);
+    }
     return 'error';
   }
 }
@@ -323,15 +335,30 @@ async function main() {
       exponentialBackoff: true
     });
     
+    // Initialize progress manager
+    const progress = new ProgressManager({
+      quiet: quietMode,
+      showSpeed: true,
+      showETA: true
+    });
+    
+    // Handle graceful shutdown
+    const cleanup = () => {
+      progress.cleanup();
+      process.exit(0);
+    };
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+    
     // Check if we're resuming from a previous run
     let resumeState = null;
     if (resumeFlag) {
       resumeState = await errorRecovery.loadState();
-      if (resumeState) {
+      if (resumeState && !quietMode) {
         console.log('📂 Resuming from previous state...');
         console.log(`   Previously processed: ${resumeState.progress.processed} files`);
         console.log(`   Remaining: ${resumeState.progress.remaining} files\n`);
-      } else {
+      } else if (!resumeState && !quietMode) {
         console.log('⚠️  No previous state found, starting fresh\n');
       }
     }
@@ -378,11 +405,13 @@ async function main() {
       return;
     }
 
-    console.log(`Found ${imageFiles.length} images to process...`);
-    if (config.formats.length < 3 || !config.generateThumbnails) {
-      console.log(`Using configuration: formats=[${config.formats.join(', ')}], thumbnails=${config.generateThumbnails}`);
+    if (!quietMode) {
+      console.log(`Found ${imageFiles.length} images to process...`);
+      if (config.formats.length < 3 || !config.generateThumbnails) {
+        console.log(`Using configuration: formats=[${config.formats.join(', ')}], thumbnails=${config.generateThumbnails}`);
+      }
+      console.log('');
     }
-    console.log('');
 
     // Process images
     let processed = 0;
@@ -408,8 +437,11 @@ async function main() {
       pending: filesToProcess.map(f => path.join('original', f)),
       configuration: config
     });
+    
+    // Start progress bar
+    progress.start(filesToProcess.length, resumeFlag ? 'Resuming batch processing...' : '');
 
-    for (const file of filesToProcess) {
+    for (const [index, file] of filesToProcess.entries()) {
       const inputPath = path.join('original', file);
       
       // Skip if already processed in resume mode
@@ -417,11 +449,22 @@ async function main() {
         const previousResult = errorRecovery.processedFiles.get(inputPath);
         if (previousResult && previousResult.status === 'success') {
           skipped++;
+          progress.update(index + 1, { 
+            filename: file, 
+            status: 'skipped' 
+          });
         } else {
           errors++;
+          progress.update(index + 1, { 
+            filename: file, 
+            status: 'error' 
+          });
         }
         continue;
       }
+      
+      // Update progress to show current file
+      progress.setFilename(file);
       
       // Wrap the optimization in error recovery
       const { success, result: optimizationResult, attempts } = await errorRecovery.processWithRecovery(
@@ -450,29 +493,43 @@ async function main() {
         await errorRecovery.saveState({
           startedAt: resumeState?.startedAt || new Date().toISOString(),
           total: imageFiles.length,
-          pending: filesToProcess.slice(filesToProcess.indexOf(file) + 1).map(f => path.join('original', f)),
+          pending: filesToProcess.slice(index + 1).map(f => path.join('original', f)),
           configuration: config
         });
       }
       
+      // Update progress and stats
+      let statusForProgress = 'processed';
+      
       switch (result) {
         case 'processed':
           processed++;
+          statusForProgress = 'processed';
           break;
         case 'skipped':
           skipped++;
+          statusForProgress = 'skipped';
           break;
         case 'lfs-pointer':
           lfsPointers++;
+          statusForProgress = 'skipped';
           break;
         case 'lfs-error':
           lfsErrors++;
           errors++;
+          statusForProgress = 'error';
           break;
         case 'error':
           errors++;
+          statusForProgress = 'error';
           break;
       }
+      
+      // Update progress bar
+      progress.update(index + 1, {
+        filename: file,
+        status: statusForProgress
+      });
     }
 
     // Final state save
@@ -483,35 +540,40 @@ async function main() {
       configuration: config
     });
     
-    // Summary
-    console.log('\n' + '='.repeat(50));
-    console.log('✅ Optimization complete!');
-    console.log(`   Processed: ${processed} images`);
-    console.log(`   Skipped: ${skipped} images (already up to date)`);
-    if (lfsPointers > 0) {
-      console.log(`   LFS pointers: ${lfsPointers} files (use --pull-lfs to process)`);
-    }
-    if (lfsErrors > 0) {
-      console.log(`   LFS errors: ${lfsErrors} files`);
-    }
-    if (errors > 0) {
-      console.log(`   Errors: ${errors} images`);
-      
-      // Generate error report
-      const report = errorRecovery.generateReport();
-      if (report.errors.length > 0) {
-        console.log(`   Error details saved to: ${report.errorLogPath}`);
-      }
-    }
+    // Finish progress bar
+    progress.finish(false); // Don't show built-in summary
     
-    // Show timing
-    const elapsedTime = Date.now() - startTime;
-    const seconds = Math.floor(elapsedTime / 1000);
-    const minutes = Math.floor(seconds / 60);
-    if (minutes > 0) {
-      console.log(`   Time: ${minutes}m ${seconds % 60}s`);
-    } else {
-      console.log(`   Time: ${seconds}s`);
+    // Summary
+    if (!quietMode) {
+      console.log('\n' + '='.repeat(50));
+      console.log('✅ Optimization complete!');
+      console.log(`   Processed: ${processed} images`);
+      console.log(`   Skipped: ${skipped} images (already up to date)`);
+      if (lfsPointers > 0) {
+        console.log(`   LFS pointers: ${lfsPointers} files (use --pull-lfs to process)`);
+      }
+      if (lfsErrors > 0) {
+        console.log(`   LFS errors: ${lfsErrors} files`);
+      }
+      if (errors > 0) {
+        console.log(`   Errors: ${errors} images`);
+        
+        // Generate error report
+        const report = errorRecovery.generateReport();
+        if (report.errors.length > 0) {
+          console.log(`   Error details saved to: ${report.errorLogPath}`);
+        }
+      }
+      
+      // Show timing
+      const elapsedTime = Date.now() - startTime;
+      const seconds = Math.floor(elapsedTime / 1000);
+      const minutes = Math.floor(seconds / 60);
+      if (minutes > 0) {
+        console.log(`   Time: ${minutes}m ${seconds % 60}s`);
+      } else {
+        console.log(`   Time: ${seconds}s`);
+      }
     }
     
     // Calculate and display size savings
@@ -547,17 +609,21 @@ async function main() {
       const savedBytes = processedOriginalSize - processedOptimizedSize;
       const savedPercent = processedOriginalSize > 0 ? ((savedBytes / processedOriginalSize) * 100).toFixed(1) : 0;
       
-      console.log(`\n📊 Size Statistics:`);
-      console.log(`   Original size: ${formatBytes(processedOriginalSize)}`);
-      console.log(`   Optimized size: ${formatBytes(processedOptimizedSize)}`);
-      if (savedBytes > 0) {
-        console.log(`   Space saved: ${formatBytes(savedBytes)} (${savedPercent}%)`);
-      } else {
-        console.log(`   Size increased: ${formatBytes(Math.abs(savedBytes))} (+${Math.abs(savedPercent)}%)`);
+      if (!quietMode) {
+        console.log(`\n📊 Size Statistics:`);
+        console.log(`   Original size: ${formatBytes(processedOriginalSize)}`);
+        console.log(`   Optimized size: ${formatBytes(processedOptimizedSize)}`);
+        if (savedBytes > 0) {
+          console.log(`   Space saved: ${formatBytes(savedBytes)} (${savedPercent}%)`);
+        } else {
+          console.log(`   Size increased: ${formatBytes(Math.abs(savedBytes))} (+${Math.abs(savedPercent)}%)`);
+        }
       }
     }
     
-    console.log('='.repeat(50));
+    if (!quietMode) {
+      console.log('='.repeat(50));
+    }
     
     // Clean up state file if everything was successful
     if (errors === 0 && !resumeFlag) {

@@ -14,10 +14,10 @@ Phase 3 focuses on making the image optimization system highly configurable and 
 - ✅ Format selection options
 - ✅ Metadata preservation options
 - ✅ Error recovery mechanisms
+- ✅ Batch processing progress bar
 
 ## Remaining Tasks
 - Per-image quality settings
-- Batch processing progress bar
 
 ## Task Dependency Graph
 
@@ -30,18 +30,19 @@ graph TD
     A -->|enables| E[Metadata preservation]
     A -->|enables| H[Error recovery mechanisms]
     
-    %% Remaining tasks (yellow)
+    %% Remaining task (yellow)
     A -->|required for| F[Per-image quality settings]
     B -->|extends to| F
     
+    %% Completed standalone task
     G[Batch processing progress bar]
     
     %% Styling
     classDef completed fill:#90EE90,stroke:#333,stroke-width:2px
     classDef remaining fill:#FFFFE0,stroke:#333,stroke-width:2px
     
-    class A,B,C,D,E,H completed
-    class F,G remaining
+    class A,B,C,D,E,G,H completed
+    class F remaining
 ```
 
 ## Task Details
