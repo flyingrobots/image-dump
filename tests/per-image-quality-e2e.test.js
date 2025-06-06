@@ -7,7 +7,41 @@ const sharp = require('sharp');
 describe('Per-Image Quality E2E', () => {
   let testDir;
   const scriptPath = path.join(__dirname, '..', 'scripts', 'optimize-images.js');
-  const realImagePath = path.join(__dirname, '..', 'original', 'james.png'); // Use a real image
+  
+  // Helper function to create a complex test image that shows quality differences
+  async function createTestImage() {
+    // Create a base image with gradients and patterns
+    const baseImage = await sharp({
+      create: {
+        width: 800,
+        height: 600,
+        channels: 3,
+        background: { r: 128, g: 128, b: 128 }
+      }
+    })
+    .png()
+    .toBuffer();
+    
+    // Add noise and details to make compression differences more apparent
+    return await sharp(baseImage)
+      .composite([
+        {
+          input: await sharp({
+            create: {
+              width: 800,
+              height: 600,
+              channels: 3,
+              noise: { type: 'gaussian', mean: 128, sigma: 30 }
+            }
+          }).png().toBuffer(),
+          blend: 'multiply'
+        }
+      ])
+      .modulate({ brightness: 1.2, saturation: 1.5 })
+      .sharpen()
+      .png()
+      .toBuffer();
+  }
   
   beforeEach(async () => {
     testDir = path.join(os.tmpdir(), `per-image-quality-e2e-${Date.now()}`);
@@ -32,7 +66,7 @@ describe('Per-Image Quality E2E', () => {
       const config = {
         formats: ['webp'],
         quality: {
-          webp: 70  // Default quality
+          webp: 60  // Default quality
         },
         qualityRules: [
           {
@@ -41,17 +75,18 @@ describe('Per-Image Quality E2E', () => {
           },
           {
             pattern: '*-thumb.*',
-            quality: { webp: 50 }
+            quality: { webp: 30 }
           }
         ]
       };
       
       await fs.writeFile('.imagerc', JSON.stringify(config, null, 2));
       
-      // Copy real image to test locations
-      await fs.copyFile(realImagePath, 'original/regular.png');
-      await fs.copyFile(realImagePath, 'original/banner-hero.png');
-      await fs.copyFile(realImagePath, 'original/product-thumb.png');
+      // Create and write test images
+      const testImageBuffer = await createTestImage();
+      await fs.writeFile('original/regular.png', testImageBuffer);
+      await fs.writeFile('original/banner-hero.png', testImageBuffer);
+      await fs.writeFile('original/product-thumb.png', testImageBuffer);
     });
     
     it('should apply different quality based on filename patterns', async () => {
@@ -74,26 +109,27 @@ describe('Per-Image Quality E2E', () => {
       const config = {
         formats: ['webp'],
         quality: {
-          webp: 80
+          webp: 70
         },
         qualityRules: [
           {
             directory: 'products/',
-            quality: { webp: 60 }
+            quality: { webp: 40 }
           },
           {
             directory: 'heroes/',
-            quality: { webp: 90 }
+            quality: { webp: 95 }
           }
         ]
       };
       
       await fs.writeFile('.imagerc', JSON.stringify(config, null, 2));
       
-      // Copy real image to test locations
-      await fs.copyFile(realImagePath, 'original/regular.png');
-      await fs.copyFile(realImagePath, 'original/products/widget.png');
-      await fs.copyFile(realImagePath, 'original/heroes/banner.png');
+      // Create and write test images
+      const testImageBuffer = await createTestImage();
+      await fs.writeFile('original/regular.png', testImageBuffer);
+      await fs.writeFile('original/products/widget.png', testImageBuffer);
+      await fs.writeFile('original/heroes/banner.png', testImageBuffer);
     });
     
     it('should apply quality based on directory', async () => {
@@ -120,29 +156,31 @@ describe('Per-Image Quality E2E', () => {
         qualityRules: [
           {
             minWidth: 2000,
-            quality: { webp: 90 }
+            quality: { webp: 95 }
           },
           {
             maxWidth: 500,
-            quality: { webp: 50 }
+            quality: { webp: 30 }
           }
         ]
       };
       
       await fs.writeFile('.imagerc', JSON.stringify(config, null, 2));
       
-      // Create images of different sizes from the real image
-      const smallImage = await sharp(realImagePath)
+      // Create test image and resize to different sizes
+      const testImageBuffer = await createTestImage();
+      
+      const smallImage = await sharp(testImageBuffer)
         .resize(300, 300)
         .png()
         .toBuffer();
       
-      const mediumImage = await sharp(realImagePath)
+      const mediumImage = await sharp(testImageBuffer)
         .resize(1000, 1000)
         .png()
         .toBuffer();
       
-      const largeImage = await sharp(realImagePath)
+      const largeImage = await sharp(testImageBuffer)
         .resize(3000, 2000)
         .png()
         .toBuffer();
@@ -195,10 +233,11 @@ describe('Per-Image Quality E2E', () => {
       
       await fs.mkdir('original/marketing', { recursive: true });
       
-      // Copy real image to test locations
-      await fs.copyFile(realImagePath, 'original/page-hero.png');
-      await fs.copyFile(realImagePath, 'original/marketing/banner-hero.png');
-      await fs.copyFile(realImagePath, 'original/marketing/regular.png');
+      // Create and write test images
+      const testImageBuffer = await createTestImage();
+      await fs.writeFile('original/page-hero.png', testImageBuffer);
+      await fs.writeFile('original/marketing/banner-hero.png', testImageBuffer);
+      await fs.writeFile('original/marketing/regular.png', testImageBuffer);
     });
     
     it('should apply most specific rule', async () => {
@@ -235,8 +274,9 @@ describe('Per-Image Quality E2E', () => {
       
       await fs.writeFile('.imagerc', JSON.stringify(config, null, 2));
       
-      // Copy real image for testing
-      await fs.copyFile(realImagePath, 'original/image-special.png');
+      // Create and write test image
+      const testImageBuffer = await createTestImage();
+      await fs.writeFile('original/image-special.png', testImageBuffer);
       
       const result = execSync(`node ${scriptPath}`, { encoding: 'utf8' });
       
