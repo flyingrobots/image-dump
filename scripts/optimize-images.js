@@ -1,14 +1,16 @@
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
-
-const INPUT_DIR = 'original';
-const OUTPUT_DIR = 'optimized';
+const ConfigLoader = require('./lib/config-loader');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
 const forceReprocess = args.includes('--force');
 const pullLfs = args.includes('--pull-lfs');
+const noThumbnails = args.includes('--no-thumbnails');
+
+// Will be populated by config
+let config = {};
 
 async function getFileModTime(filePath) {
   try {
@@ -46,24 +48,60 @@ async function isGitLfsPointer(filePath) {
   }
 }
 
+async function getOutputPaths(filename) {
+  const name = path.parse(filename).name;
+  const ext = path.parse(filename).ext.toLowerCase();
+  const paths = [];
+  
+  // Generate paths based on configured formats
+  if (config.formats.includes('webp')) {
+    paths.push(path.join(config.outputDir, `${name}.webp`));
+  }
+  
+  if (config.formats.includes('avif')) {
+    paths.push(path.join(config.outputDir, `${name}.avif`));
+  }
+  
+  if (config.formats.includes('original') || 
+      config.formats.includes('jpeg') || 
+      config.formats.includes('png')) {
+    if (ext === '.gif' || ext === '.webp') {
+      paths.push(path.join(config.outputDir, filename));
+    } else if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') {
+      paths.push(path.join(config.outputDir, filename));
+    }
+  }
+  
+  if (config.generateThumbnails && !noThumbnails && 
+      (config.formats.includes('webp') || config.formats.includes('avif'))) {
+    paths.push(path.join(config.outputDir, `${name}-thumb.webp`));
+  }
+  
+  return paths;
+}
+
 async function optimizeImage(inputPath, filename) {
   const name = path.parse(filename).name;
   const ext = path.parse(filename).ext.toLowerCase();
   
-  // Check if this is a git-lfs pointer file
+  // Check for Git LFS pointer
   if (await isGitLfsPointer(inputPath)) {
     if (pullLfs) {
       console.log(`📥 Pulling LFS file: ${filename}`);
       const { execSync } = require('child_process');
       try {
-        execSync(`git lfs pull --include="${inputPath}"`, { stdio: 'inherit' });
-        // Check again if it's still a pointer (pull might have failed)
+        execSync(`git lfs pull --include="${filename}"`, { 
+          cwd: path.dirname(inputPath),
+          stdio: 'inherit' 
+        });
+        
+        // Check again after pull
         if (await isGitLfsPointer(inputPath)) {
-          console.log(`❌ Failed to pull LFS file: ${filename}`);
+          console.error(`❌ Failed to pull LFS file: ${filename}`);
           return 'lfs-error';
         }
       } catch (error) {
-        console.log(`❌ Error pulling LFS file: ${filename} - ${error.message}`);
+        console.error(`❌ Error pulling LFS file: ${filename} - ${error.message}`);
         return 'lfs-error';
       }
     } else {
@@ -71,130 +109,138 @@ async function optimizeImage(inputPath, filename) {
       return 'lfs-pointer';
     }
   }
+
+  const outputPaths = await getOutputPaths(filename);
   
-  // Define output paths
-  const outputPaths = [
-    path.join(OUTPUT_DIR, `${name}.webp`),
-    path.join(OUTPUT_DIR, `${name}.avif`),
-    path.join(OUTPUT_DIR, `${name}${ext === '.png' ? '.png' : '.jpg'}`),
-    path.join(OUTPUT_DIR, `${name}-thumb.webp`)
-  ];
-  
-  // Check if we need to process this image
+  // Check if processing is needed
   const needsProcessing = await shouldProcessImage(inputPath, outputPaths);
+  
   if (!needsProcessing) {
     console.log(`⏭️  Skipping ${filename} (already up to date)`);
     return 'skipped';
   }
-  
+
   try {
     // Handle GIF files - just copy them
     if (ext === '.gif') {
-      await fs.copyFile(inputPath, path.join(OUTPUT_DIR, filename));
+      await fs.copyFile(inputPath, path.join(config.outputDir, filename));
       console.log(`✅ Copied ${filename} (GIF files are not optimized)`);
       return 'processed';
     }
-    
-    // Handle WebP input - optimize but keep as WebP
+
+    // For WebP input, handle specially
     if (ext === '.webp') {
-      const image = sharp(inputPath);
+      const tasks = [];
       
-      // Create optimized WebP
-      await image
-        .clone()
-        .resize(2000, 2000, { 
-          withoutEnlargement: true,
-          fit: 'inside'
-        })
-        .webp({ quality: 85 })
-        .toFile(path.join(OUTPUT_DIR, filename));
+      if (config.formats.includes('webp') || config.formats.includes('original')) {
+        tasks.push(
+          sharp(inputPath)
+            .resize(2000, 2000, {
+              fit: 'inside',
+              withoutEnlargement: true
+            })
+            .webp({ quality: config.quality.webp })
+            .toFile(path.join(config.outputDir, filename))
+        );
+      }
       
-      // Create thumbnail
-      await image
-        .clone()
-        .resize(400, 400, { 
-          withoutEnlargement: true,
-          fit: 'inside'
-        })
-        .webp({ quality: 80 })
-        .toFile(path.join(OUTPUT_DIR, `${name}-thumb.webp`));
+      if (config.generateThumbnails && !noThumbnails) {
+        tasks.push(
+          sharp(inputPath)
+            .resize(config.thumbnailWidth, config.thumbnailWidth, {
+              fit: 'cover',
+              position: 'centre'
+            })
+            .webp({ quality: config.quality.webp })
+            .toFile(path.join(config.outputDir, `${name}-thumb.webp`))
+        );
+      }
+      
+      if (tasks.length > 0) {
+        await Promise.all(tasks);
+      }
       
       // Validate output files
-      try {
-        await sharp(path.join(OUTPUT_DIR, filename)).metadata();
-        await sharp(path.join(OUTPUT_DIR, `${name}-thumb.webp`)).metadata();
-      } catch (validationError) {
-        console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
-        return 'error';
+      for (const outputPath of outputPaths) {
+        try {
+          await sharp(outputPath).metadata();
+        } catch (validationError) {
+          console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
+          return 'error';
+        }
       }
       
       console.log(`✅ Optimized ${filename}`);
       return 'processed';
     }
+
+    // For other formats, process based on configuration
+    const tasks = [];
     
-    // Load image once and rotate based on EXIF data
-    const image = sharp(inputPath)
-      .rotate(); // Auto-rotate based on EXIF orientation
-    
-    // Create WebP version
-    await image
-      .clone()
-      .resize(2000, 2000, { 
-        withoutEnlargement: true,
-        fit: 'inside'
-      })
-      .webp({ quality: 85 })
-      .toFile(outputPaths[0]);
-    
-    // Create AVIF version (better compression than WebP)
-    await image
-      .clone()
-      .resize(2000, 2000, { 
-        withoutEnlargement: true,
-        fit: 'inside'
-      })
-      .avif({ quality: 80 })
-      .toFile(outputPaths[1]);
-    
-    // Create optimized PNG/JPEG
-    if (ext === '.png') {
-      await image
-        .clone()
-        .resize(2000, 2000, { 
-          withoutEnlargement: true,
-          fit: 'inside'
-        })
-        .png({ compressionLevel: 9 })
-        .toFile(outputPaths[2]);
-    } else {
-      await image
-        .clone()
-        .resize(2000, 2000, { 
-          withoutEnlargement: true,
-          fit: 'inside'
-        })
-        .jpeg({ quality: 90 })
-        .toFile(outputPaths[2]);
+    if (config.formats.includes('original') || 
+        (ext === '.png' && config.formats.includes('png')) ||
+        ((ext === '.jpg' || ext === '.jpeg') && config.formats.includes('jpeg'))) {
+      const isJpeg = ext === '.jpg' || ext === '.jpeg';
+      tasks.push(
+        sharp(inputPath)
+          .resize(2000, 2000, {
+            fit: 'inside',
+            withoutEnlargement: true
+          })
+          [isJpeg ? 'jpeg' : 'png'](isJpeg ? { quality: config.quality.jpeg } : {})
+          .toFile(path.join(config.outputDir, filename))
+      );
     }
     
-    // Create thumbnail
-    await image
-      .clone()
-      .resize(400, 400, { 
-        withoutEnlargement: true,
-        fit: 'inside'
-      })
-      .webp({ quality: 80 })
-      .toFile(outputPaths[3]);
+    if (config.formats.includes('avif')) {
+      tasks.push(
+        sharp(inputPath)
+          .resize(2000, 2000, {
+            fit: 'inside',
+            withoutEnlargement: true
+          })
+          .avif({ quality: config.quality.avif })
+          .toFile(path.join(config.outputDir, `${name}.avif`))
+      );
+    }
+    
+    if (config.formats.includes('webp')) {
+      tasks.push(
+        sharp(inputPath)
+          .resize(2000, 2000, {
+            fit: 'inside',
+            withoutEnlargement: true
+          })
+          .webp({ quality: config.quality.webp })
+          .toFile(path.join(config.outputDir, `${name}.webp`))
+      );
+    }
+    
+    if (config.generateThumbnails && !noThumbnails && 
+        (config.formats.includes('webp') || config.formats.includes('avif'))) {
+      tasks.push(
+        sharp(inputPath)
+          .resize(config.thumbnailWidth, config.thumbnailWidth, {
+            fit: 'cover',
+            position: 'centre'
+          })
+          .webp({ quality: config.quality.webp })
+          .toFile(path.join(config.outputDir, `${name}-thumb.webp`))
+      );
+    }
+    
+    if (tasks.length > 0) {
+      await Promise.all(tasks);
+    }
     
     // Validate all output files exist and are valid
-    try {
-      for (const outputPath of outputPaths) {
+    for (const outputPath of outputPaths) {
+      try {
         await sharp(outputPath).metadata();
+      } catch (validationError) {
+        console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
+        return 'error';
       }
-    } catch (validationError) {
-      console.error(`❌ Validation failed for ${filename}: ${validationError.message}`);
-      return 'error';
     }
     
     console.log(`✅ Optimized ${filename}`);
@@ -232,51 +278,85 @@ function formatBytes(bytes) {
 
 async function main() {
   try {
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    // Load configuration
+    const configLoader = new ConfigLoader();
     
-    const files = await fs.readdir(INPUT_DIR);
-    const imageFiles = files.filter(f => 
-      /\.(jpg|jpeg|png|gif|webp)$/i.test(f)
-    );
+    // Build CLI args from parsed flags
+    const cliArgs = {};
+    if (noThumbnails) {
+      cliArgs.generateThumbnails = false;
+    }
     
+    try {
+      config = await configLoader.loadConfig(process.cwd(), cliArgs);
+    } catch (error) {
+      console.error(`❌ Configuration error: ${error.message}`);
+      process.exit(1);
+    }
+    
+    // Ensure directories exist
+    await fs.mkdir('original', { recursive: true });
+    await fs.mkdir(config.outputDir, { recursive: true });
+
+    // Get list of images to process
+    const files = await fs.readdir('original');
+    const imageFiles = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+    });
+
     if (imageFiles.length === 0) {
-      console.log('No images found in the original directory');
+      console.log('No images found in the original/ directory');
       return;
     }
-    
+
     console.log(`Found ${imageFiles.length} images to process...`);
-    if (forceReprocess) {
-      console.log('Force reprocessing enabled - all images will be regenerated');
-    }
-    if (pullLfs) {
-      console.log('Git LFS auto-pull enabled - pointer files will be downloaded');
+    if (config.formats.length < 3 || !config.generateThumbnails) {
+      console.log(`Using configuration: formats=[${config.formats.join(', ')}], thumbnails=${config.generateThumbnails}`);
     }
     console.log('');
-    
+
+    // Process images
     let processed = 0;
     let skipped = 0;
-    let errors = 0;
     let lfsPointers = 0;
     let lfsErrors = 0;
-    
+    let errors = 0;
+
     for (const file of imageFiles) {
-      const result = await optimizeImage(path.join(INPUT_DIR, file), file);
-      if (result === 'processed') processed++;
-      else if (result === 'skipped') skipped++;
-      else if (result === 'error') errors++;
-      else if (result === 'lfs-pointer') lfsPointers++;
-      else if (result === 'lfs-error') lfsErrors++;
+      const inputPath = path.join('original', file);
+      const result = await optimizeImage(inputPath, file);
+      
+      switch (result) {
+        case 'processed':
+          processed++;
+          break;
+        case 'skipped':
+          skipped++;
+          break;
+        case 'lfs-pointer':
+          lfsPointers++;
+          break;
+        case 'lfs-error':
+          lfsErrors++;
+          errors++;
+          break;
+        case 'error':
+          errors++;
+          break;
+      }
     }
-    
+
+    // Summary
     console.log('\n' + '='.repeat(50));
     console.log('✅ Optimization complete!');
     console.log(`   Processed: ${processed} images`);
     console.log(`   Skipped: ${skipped} images (already up to date)`);
     if (lfsPointers > 0) {
-      console.log(`   Git LFS pointers: ${lfsPointers} files (use --pull-lfs flag)`);
+      console.log(`   LFS pointers: ${lfsPointers} files (use --pull-lfs to process)`);
     }
     if (lfsErrors > 0) {
-      console.log(`   Git LFS errors: ${lfsErrors} files`);
+      console.log(`   LFS errors: ${lfsErrors} files`);
     }
     if (errors > 0) {
       console.log(`   Errors: ${errors} images`);
@@ -289,7 +369,7 @@ async function main() {
       
       // Calculate sizes only for processed files
       for (const file of imageFiles) {
-        const inputPath = path.join(INPUT_DIR, file);
+        const inputPath = path.join('original', file);
         const name = path.parse(file).name;
         const ext = path.parse(file).ext.toLowerCase();
         
@@ -298,7 +378,7 @@ async function main() {
           processedOriginalSize += inputStats.size;
           
           // Check main output file (not thumbnails or alternate formats)
-          const mainOutputPath = path.join(OUTPUT_DIR, ext === '.gif' ? file : 
+          const mainOutputPath = path.join(config.outputDir, ext === '.gif' ? file : 
             (ext === '.webp' ? file : `${name}${ext === '.png' ? '.png' : '.jpg'}`));
           
           try {
@@ -328,7 +408,7 @@ async function main() {
     console.log('='.repeat(50));
     
     // Exit with error code if there were errors
-    if (errors > 0 || lfsErrors > 0) {
+    if (errors > 0) {
       process.exit(1);
     }
   } catch (error) {
