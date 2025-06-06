@@ -36,7 +36,7 @@ This document outlines the development phases and planned features for the Image
 - [x] Custom output paths
 - [x] Format selection options
 - [ ] Per-image quality settings
-- [x] Metadata preservation options
+- [x] Metadata preservation options ✅
 - [ ] Batch processing progress bar
 - [ ] Error recovery mechanisms
 

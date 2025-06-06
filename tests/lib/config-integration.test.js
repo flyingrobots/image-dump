@@ -39,6 +39,11 @@ describe('Configuration Integration', () => {
     });
     
     it('should handle permission errors when reading config', async () => {
+      // Skip this test in Docker environments where root can read any file
+      if (process.getuid && process.getuid() === 0) {
+        return;
+      }
+      
       await fs.writeFile('.imagerc', JSON.stringify({ formats: ['webp'] }));
       await fs.chmod('.imagerc', 0o000); // Remove all permissions
       

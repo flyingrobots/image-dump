@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 const ConfigLoader = require('../../scripts/lib/config-loader');
 
 describe('ConfigLoader', () => {
@@ -9,7 +10,7 @@ describe('ConfigLoader', () => {
   beforeEach(async () => {
     configLoader = new ConfigLoader();
     // Create a temporary directory for test files
-    tempDir = path.join(__dirname, `../temp-${Date.now()}`);
+    tempDir = path.join(os.tmpdir(), `config-test-${Date.now()}`);
     await fs.mkdir(tempDir, { recursive: true });
   });
   

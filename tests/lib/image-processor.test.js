@@ -18,7 +18,10 @@ describe('ImageProcessor', () => {
       toFile: jest.fn().mockResolvedValue()
     };
     
-    mockSharp = jest.fn().mockReturnValue(mockImage);
+    // Mock sharp to return an object with rotate method
+    mockSharp = jest.fn().mockImplementation(() => ({
+      rotate: jest.fn().mockReturnValue(mockImage)
+    }));
     processor = new ImageProcessor(mockSharp);
   });
 
@@ -36,7 +39,9 @@ describe('ImageProcessor', () => {
       const results = await processor.processImage('/input/image.png', configs);
       
       expect(mockSharp).toHaveBeenCalledWith('/input/image.png');
-      expect(mockImage.rotate).toHaveBeenCalled();
+      // Since we changed the mock structure, we need to check differently
+      const sharpInstance = mockSharp.mock.results[0].value;
+      expect(sharpInstance.rotate).toHaveBeenCalled();
       // Default behavior: metadata should be stripped (no withMetadata call)
       expect(mockImage.withMetadata).not.toHaveBeenCalled();
       expect(mockImage.resize).toHaveBeenCalledWith(2000, 2000, {
