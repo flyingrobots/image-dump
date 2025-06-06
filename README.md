@@ -75,8 +75,31 @@ Create a `.imagerc` file in your project root to customize optimization settings
 - **generateThumbnails**: Create thumbnail versions
 - **thumbnailWidth**: Thumbnail size in pixels
 - **preserveMetadata**: Keep EXIF/metadata (`true`) or strip it (`false`, default)
+- **errorRecovery**: Configure error handling and retry behavior (see below)
 
 See [.imagerc.example](.imagerc.example) for all available options.
+
+#### Error Recovery Configuration
+
+Configure error recovery in your `.imagerc`:
+
+```json
+{
+  "errorRecovery": {
+    "continueOnError": true,
+    "maxRetries": 3,
+    "retryDelay": 1000,
+    "exponentialBackoff": true
+  }
+}
+```
+
+Or use command-line flags:
+- `--continue-on-error`: Continue processing after failures
+- `--max-retries=3`: Number of retry attempts (default: 3)
+- `--retry-delay=1000`: Initial retry delay in ms (default: 1000)
+- `--resume`: Resume from previous interrupted run
+- `--error-log=PATH`: Custom error log location
 
 ### Using Optimized Images
 

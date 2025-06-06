@@ -24,3 +24,12 @@
 //   "copyright": true,
 //   "gps": false
 // }
+//
+// Error recovery configuration:
+// "errorRecovery": {
+//   "continueOnError": true,      // Continue after failures
+//   "maxRetries": 3,              // Retry attempts for transient errors
+//   "retryDelay": 1000,           // Initial retry delay (ms)
+//   "exponentialBackoff": true,   // Use exponential backoff
+//   "errorLog": "errors.log"      // Custom error log path
+// }

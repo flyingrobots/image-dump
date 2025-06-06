@@ -2,12 +2,25 @@ const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
 const ConfigLoader = require('./lib/config-loader');
+const ErrorRecoveryManager = require('./lib/error-recovery-manager');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
 const forceReprocess = args.includes('--force');
 const pullLfs = args.includes('--pull-lfs');
 const noThumbnails = args.includes('--no-thumbnails');
+const continueOnError = args.includes('--continue-on-error');
+const resumeFlag = args.includes('--resume');
+
+// Extract error recovery options
+const maxRetriesArg = args.find(arg => arg.startsWith('--max-retries='));
+const maxRetries = maxRetriesArg ? parseInt(maxRetriesArg.split('=')[1]) : 3;
+
+const retryDelayArg = args.find(arg => arg.startsWith('--retry-delay='));
+const retryDelay = retryDelayArg ? parseInt(retryDelayArg.split('=')[1]) : 1000;
+
+const errorLogArg = args.find(arg => arg.startsWith('--error-log='));
+const errorLog = errorLogArg ? errorLogArg.split('=')[1] : 'image-optimization-errors.log';
 
 // Will be populated by config
 let config = {};
@@ -301,6 +314,28 @@ function formatBytes(bytes) {
 
 async function main() {
   try {
+    // Initialize error recovery manager
+    const errorRecovery = new ErrorRecoveryManager({
+      continueOnError,
+      maxRetries,
+      retryDelay,
+      errorLog,
+      exponentialBackoff: true
+    });
+    
+    // Check if we're resuming from a previous run
+    let resumeState = null;
+    if (resumeFlag) {
+      resumeState = await errorRecovery.loadState();
+      if (resumeState) {
+        console.log('📂 Resuming from previous state...');
+        console.log(`   Previously processed: ${resumeState.progress.processed} files`);
+        console.log(`   Remaining: ${resumeState.progress.remaining} files\n`);
+      } else {
+        console.log('⚠️  No previous state found, starting fresh\n');
+      }
+    }
+    
     // Load configuration
     const configLoader = new ConfigLoader();
     
@@ -312,6 +347,16 @@ async function main() {
     
     try {
       config = await configLoader.loadConfig(process.cwd(), cliArgs);
+      
+      // Merge with error recovery config if present
+      if (config.errorRecovery) {
+        Object.assign(errorRecovery, {
+          continueOnError: config.errorRecovery.continueOnError ?? errorRecovery.continueOnError,
+          maxRetries: config.errorRecovery.maxRetries ?? errorRecovery.maxRetries,
+          retryDelay: config.errorRecovery.retryDelay ?? errorRecovery.retryDelay,
+          exponentialBackoff: config.errorRecovery.exponentialBackoff ?? errorRecovery.exponentialBackoff
+        });
+      }
     } catch (error) {
       console.error(`❌ Configuration error: ${error.message}`);
       process.exit(1);
@@ -345,10 +390,70 @@ async function main() {
     let lfsPointers = 0;
     let lfsErrors = 0;
     let errors = 0;
+    const startTime = Date.now();
 
-    for (const file of imageFiles) {
+    // Determine which files to process
+    let filesToProcess = imageFiles;
+    if (resumeState && resumeState.files.pending.length > 0) {
+      // Filter to only pending files if resuming
+      filesToProcess = imageFiles.filter(file => 
+        resumeState.files.pending.includes(file) || !errorRecovery.isFileProcessed(path.join('original', file))
+      );
+    }
+
+    // Save initial state
+    await errorRecovery.saveState({
+      startedAt: resumeState?.startedAt || new Date().toISOString(),
+      total: imageFiles.length,
+      pending: filesToProcess.map(f => path.join('original', f)),
+      configuration: config
+    });
+
+    for (const file of filesToProcess) {
       const inputPath = path.join('original', file);
-      const result = await optimizeImage(inputPath, file);
+      
+      // Skip if already processed in resume mode
+      if (errorRecovery.isFileProcessed(inputPath)) {
+        const previousResult = errorRecovery.processedFiles.get(inputPath);
+        if (previousResult && previousResult.status === 'success') {
+          skipped++;
+        } else {
+          errors++;
+        }
+        continue;
+      }
+      
+      // Wrap the optimization in error recovery
+      const { success, result: optimizationResult, attempts } = await errorRecovery.processWithRecovery(
+        async () => {
+          const result = await optimizeImage(inputPath, file);
+          if (result === 'error' || result === 'lfs-error') {
+            throw new Error(`Optimization failed with result: ${result}`);
+          }
+          return result;
+        },
+        { file: inputPath }
+      );
+      
+      const result = success ? optimizationResult : 'error';
+      
+      // Record the result
+      errorRecovery.recordProcessedFile(inputPath, {
+        status: success ? 'success' : 'failed',
+        result,
+        attempts,
+        error: success ? null : 'Optimization failed'
+      });
+      
+      // Update state periodically
+      if ((processed + errors + skipped) % 10 === 0) {
+        await errorRecovery.saveState({
+          startedAt: resumeState?.startedAt || new Date().toISOString(),
+          total: imageFiles.length,
+          pending: filesToProcess.slice(filesToProcess.indexOf(file) + 1).map(f => path.join('original', f)),
+          configuration: config
+        });
+      }
       
       switch (result) {
         case 'processed':
@@ -370,6 +475,14 @@ async function main() {
       }
     }
 
+    // Final state save
+    await errorRecovery.saveState({
+      startedAt: resumeState?.startedAt || new Date().toISOString(),
+      total: imageFiles.length,
+      pending: [],
+      configuration: config
+    });
+    
     // Summary
     console.log('\n' + '='.repeat(50));
     console.log('✅ Optimization complete!');
@@ -383,6 +496,22 @@ async function main() {
     }
     if (errors > 0) {
       console.log(`   Errors: ${errors} images`);
+      
+      // Generate error report
+      const report = errorRecovery.generateReport();
+      if (report.errors.length > 0) {
+        console.log(`   Error details saved to: ${report.errorLogPath}`);
+      }
+    }
+    
+    // Show timing
+    const elapsedTime = Date.now() - startTime;
+    const seconds = Math.floor(elapsedTime / 1000);
+    const minutes = Math.floor(seconds / 60);
+    if (minutes > 0) {
+      console.log(`   Time: ${minutes}m ${seconds % 60}s`);
+    } else {
+      console.log(`   Time: ${seconds}s`);
     }
     
     // Calculate and display size savings
@@ -430,8 +559,15 @@ async function main() {
     
     console.log('='.repeat(50));
     
-    // Exit with error code if there were errors
-    if (errors > 0) {
+    // Clean up state file if everything was successful
+    if (errors === 0 && !resumeFlag) {
+      await errorRecovery.clearState();
+    } else if (errors > 0 && continueOnError) {
+      console.log(`\n⚠️  Some images failed to process. Run with --resume to retry failed images.`);
+    }
+    
+    // Exit with error code if there were errors and not in continue-on-error mode
+    if (errors > 0 && !continueOnError) {
       process.exit(1);
     }
   } catch (error) {
