@@ -1,0 +1,12 @@
+{
+  "formats": ["webp", "avif", "original"],
+  "quality": {
+    "webp": 80,
+    "avif": 80,
+    "jpeg": 80
+  },
+  "outputDir": "optimized",
+  "generateThumbnails": true,
+  "thumbnailWidth": 200,
+  "preserveMetadata": false
+}

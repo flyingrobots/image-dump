@@ -48,6 +48,27 @@ make optimize-force
 make test
 ```
 
+### Configuration
+
+Create a `.imagerc` file in your project root to customize optimization settings:
+
+```json
+{
+  "formats": ["webp", "avif", "original"],
+  "quality": {
+    "webp": 85,
+    "avif": 80,
+    "jpeg": 90
+  },
+  "outputDir": "optimized",
+  "generateThumbnails": true,
+  "thumbnailWidth": 200,
+  "preserveMetadata": false
+}
+```
+
+See [.imagerc.example](.imagerc.example) for all available options.
+
 ### Using Optimized Images
 
 ```markdown
