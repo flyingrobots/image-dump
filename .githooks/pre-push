@@ -1,0 +1,18 @@
+#!/bin/sh
+# Pre-push hook that runs tests before pushing
+
+echo "🚀 Running tests before push..."
+echo ""
+
+# Run tests (which includes all CI checks)
+make test
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Tests failed! Please fix the issues before pushing."
+    echo "💡 Tip: Run 'make test' to see all failures"
+    exit 1
+fi
+
+echo ""
+echo "✅ All tests passed! Pushing to remote..."

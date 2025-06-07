@@ -168,26 +168,36 @@ image-dump/
 
 ## 🧪 Development
 
+### Setup
+
+First time setup (enables automatic tests before push):
+```bash
+./scripts/setup-dev.sh
+```
+
 ### Testing
 
-All tests run in Docker to ensure consistency between local development and CI:
+**`make test` or `npm test` runs exactly what CI runs:**
+1. Tests with coverage
+2. Console.log detection in src/
+3. Focused test detection (.only/.skip)
+4. Docker build verification
 
 ```bash
-# Run tests
+# Run tests (same as CI)
 make test
 # or
 npm test
 
-# Run tests with coverage
-make test-coverage
-# or
-npm run test:coverage
-
 # Watch mode for development
 make test-watch
-# or
-npm run test:watch
+
+# Individual commands (if needed)
+make test-coverage  # Just test coverage
+make lint-check     # Just lint checks
 ```
+
+All tests run in Docker. There is no difference between local and CI - they run identical commands.
 
 ### Docker Commands
 
