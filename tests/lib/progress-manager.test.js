@@ -1,4 +1,4 @@
-const ProgressManager = require('../../scripts/lib/progress-manager');
+const ProgressManager = require('../../src/progress-manager');
 
 // Mock cli-progress to avoid actual terminal output in tests
 jest.mock('cli-progress', () => ({

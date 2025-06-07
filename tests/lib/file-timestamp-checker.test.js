@@ -1,4 +1,4 @@
-const FileTimestampChecker = require('../../scripts/lib/file-timestamp-checker');
+const FileTimestampChecker = require('../../src/file-timestamp-checker');
 
 describe('FileTimestampChecker', () => {
   let checker;

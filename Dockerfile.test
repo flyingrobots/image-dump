@@ -17,8 +17,9 @@ COPY jest.config.js ./
 
 # Copy source code
 COPY scripts ./scripts
+COPY src ./src
 
 # Tests will be mounted as a volume
 
 # Run tests by default
-CMD ["npm", "test"]
+CMD ["npm", "run", "test:jest"]

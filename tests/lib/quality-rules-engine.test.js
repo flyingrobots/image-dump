@@ -1,4 +1,4 @@
-const QualityRulesEngine = require('../../scripts/lib/quality-rules-engine');
+const QualityRulesEngine = require('../../src/quality-rules-engine');
 
 describe('QualityRulesEngine', () => {
   let engine;

@@ -17,11 +17,8 @@ A high-performance image optimization pipeline that uses GitHub as a CDN. Drop i
 ## 🚀 Quick Start
 
 ```bash
-# Using Docker (recommended)
+# Optimize images
 make optimize
-
-# Using Node.js
-npm install && npm run optimize
 ```
 
 Images go in `original/`, optimized versions appear in `optimized/`. That's it!
@@ -168,6 +165,54 @@ image-dump/
 ├── docs/             # Documentation
 └── .github/          # GitHub Actions workflows
 ```
+
+## 🧪 Development
+
+### Setup
+
+First time setup (enables automatic tests before push):
+```bash
+./scripts/setup-dev.sh
+```
+
+### Testing
+
+**`make test` or `npm test` runs exactly what CI runs:**
+1. Tests with coverage
+2. Console.log detection in src/
+3. Focused test detection (.only/.skip)
+4. Docker build verification
+
+```bash
+# Run tests (same as CI)
+make test
+# or
+npm test
+
+# Watch mode for development
+make test-watch
+
+# Individual commands (if needed)
+make test-coverage  # Just test coverage
+make lint-check     # Just lint checks
+```
+
+All tests run in Docker. There is no difference between local and CI - they run identical commands.
+
+### Docker Commands
+
+```bash
+# Build Docker images
+make build
+
+# Rebuild without cache
+make rebuild
+
+# Clean up containers and images
+make clean
+```
+
+**Note**: Tests ALWAYS run in Docker. This ensures your local environment exactly matches CI.
 
 ## 🤝 Contributing
 

@@ -56,7 +56,7 @@ npm run test:watch
 Unit tests focus on individual components in isolation using test doubles.
 
 ```javascript
-const GitLfsDetector = require('../../scripts/lib/git-lfs-detector');
+const GitLfsDetector = require('../../src/git-lfs-detector');
 
 describe('GitLfsDetector', () => {
   let detector;
