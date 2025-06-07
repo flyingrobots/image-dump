@@ -22,4 +22,4 @@ COPY src ./src
 # Tests will be mounted as a volume
 
 # Run tests by default
-CMD ["npm", "test"]
+CMD ["npm", "run", "test:jest"]

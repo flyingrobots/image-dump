@@ -11,6 +11,9 @@
     "test": "docker compose run --rm test",
     "test:coverage": "docker compose run --rm test-coverage",
     "test:watch": "docker compose run --rm test-watch",
+    "test:jest": "jest",
+    "test:jest:coverage": "jest --coverage",
+    "test:jest:watch": "jest --watch",
     "docker:build": "docker compose build",
     "docker:clean": "docker compose down -v"
   },
