@@ -61,6 +61,7 @@ services:
       dockerfile: Dockerfile.test
     volumes:
       - ./scripts:/app/scripts
+      - ./src:/app/src
       - ./tests:/app/tests
       - ./.github:/app/.github
       - ./coverage:/app/coverage

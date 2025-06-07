@@ -15,6 +15,7 @@ RUN npm ci --only=production
 
 # Copy application code
 COPY scripts/ ./scripts/
+COPY src/ ./src/
 
 # Create directories
 RUN mkdir -p original optimized

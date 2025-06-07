@@ -1,9 +1,10 @@
-.PHONY: help build optimize optimize-force optimize-lfs test test-coverage test-watch clean
+.PHONY: help build optimize optimize-force optimize-lfs test test-coverage test-watch clean rebuild
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo "  make build          - Build Docker images"
+	@echo "  make rebuild        - Rebuild Docker images (no cache)"
 	@echo "  make optimize       - Run image optimization"
 	@echo "  make optimize-force - Force reprocess all images"
 	@echo "  make optimize-lfs   - Optimize with Git LFS support"
@@ -44,3 +45,7 @@ test-watch: build
 clean:
 	docker compose down -v
 	docker system prune -f
+
+# Rebuild Docker images (no cache)
+rebuild:
+	docker compose build --no-cache
