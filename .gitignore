@@ -87,6 +87,10 @@ pnpm-lock.yaml
 .imagerc.local
 config.local.json
 
+# State files
+.image-optimization-state.json
+.image-optimization-errors.log
+
 # Performance reports
 .lighthouseci/
 performance-reports/

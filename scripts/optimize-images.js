@@ -124,8 +124,7 @@ async function optimizeImage(inputPath, relativePath, imageQuality = null) {
       console.log(`📥 Pulling LFS file: ${relativePath}`);
       const { execSync } = require('child_process');
       try {
-        execSync(`git lfs pull --include="${relativePath}"`, { 
-          cwd: 'original',
+        execSync(`git lfs pull --include="original/${relativePath}"`, { 
           stdio: 'inherit' 
         });
         
