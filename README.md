@@ -10,6 +10,10 @@ A high-performance image optimization pipeline that uses GitHub as a CDN. Drop i
 - 🖼️ **Multi-format output** - WebP, AVIF, and optimized originals
 - 🚀 **Automatic optimization** - GitHub Actions processes on push
 - 🔍 **Smart processing** - Only processes changed images
+- 🎯 **Per-image quality** - Apply custom quality rules based on patterns, directories, or dimensions
+- 🔄 **Error recovery** - Resume interrupted batches, retry failed images
+- 📊 **Progress tracking** - Real-time progress bar with ETA and stats
+- 🏷️ **Metadata preservation** - Keep or strip EXIF data
 - 🐳 **Dockerized** - No local dependencies needed
 - 🧪 **Fully tested** - Comprehensive test suite
 - 🔐 **Git LFS support** - Efficient large file handling
@@ -159,8 +163,8 @@ Rules are applied in order of specificity - more specific rules override general
 image-dump/
 ├── original/          # Put source images here
 ├── optimized/         # Optimized images appear here
-├── scripts/           # Optimization code
-│   └── lib/          # Modular components
+├── scripts/           # CLI scripts for optimization
+├── src/               # Core modules and components
 ├── tests/            # Test suite
 ├── docs/             # Documentation
 └── .github/          # GitHub Actions workflows
@@ -216,7 +220,7 @@ make clean
 
 ## 🤝 Contributing
 
-We welcome contributions! See our [Contributing Guide](docs/development/contributing.md) and check the [Roadmap](docs/ROADMAP.md) for planned features.
+We welcome contributions! Check the [TODO.md](TODO.md) for planned features and the [Roadmap](docs/ROADMAP.md) for project phases.
 
 ## 📄 License
 

@@ -1,6 +1,6 @@
 # Feature: Metadata Preservation
 
-**Status**: ✅ Completed  
+**Status**: ⚠️ Partially Completed  
 **Priority**: 🟡 Medium  
 **Milestone**: Phase 3 - Configuration & Customization  
 **Issue**: #[TBD]
@@ -16,10 +16,10 @@ Enable users to control whether image metadata (EXIF, IPTC, XMP) is preserved or
 **So that** copyright and camera information remains intact
 
 **Acceptance Criteria:**
-- [ ] Can enable metadata preservation in config
-- [ ] EXIF data is maintained in output files
-- [ ] Copyright and author fields are preserved
-- [ ] Camera settings (ISO, aperture, etc.) are retained
+- [x] Can enable metadata preservation in config
+- [x] EXIF data is maintained in output files
+- [x] Copyright and author fields are preserved
+- [x] Camera settings (ISO, aperture, etc.) are retained
 
 ### Story 2: Privacy-Conscious User - Strip Location
 **As a** privacy-conscious user  
@@ -27,10 +27,10 @@ Enable users to control whether image metadata (EXIF, IPTC, XMP) is preserved or
 **So that** no personal information is leaked
 
 **Acceptance Criteria:**
-- [ ] Can disable metadata preservation (default)
-- [ ] All EXIF data is stripped
-- [ ] GPS location data is removed
-- [ ] No camera serial numbers remain
+- [x] Can disable metadata preservation (default)
+- [x] All EXIF data is stripped
+- [x] GPS location data is removed
+- [x] No camera serial numbers remain
 
 ### Story 3: Developer - Selective Preservation
 **As a** developer  
@@ -38,15 +38,31 @@ Enable users to control whether image metadata (EXIF, IPTC, XMP) is preserved or
 **So that** I can balance file size with information needs
 
 **Acceptance Criteria:**
-- [ ] Can specify which metadata to keep
-- [ ] Can preserve copyright while removing GPS
-- [ ] Can keep basic info while removing camera data
-- [ ] Configuration is intuitive
+- [ ] Can specify which metadata to keep (**Not Implemented**)
+- [ ] Can preserve copyright while removing GPS (**Not Implemented**)
+- [ ] Can keep basic info while removing camera data (**Not Implemented**)
+- [ ] Configuration is intuitive (**Not Implemented**)
+
+## Current Implementation Status
+
+### What's Implemented
+- **Boolean preservation**: Can enable/disable all metadata preservation via `preserveMetadata: true/false`
+- **Full preservation**: When enabled, all EXIF, IPTC, and XMP data is preserved
+- **Full stripping**: When disabled (default), all metadata is removed
+- **Configuration support**: Works via .imagerc configuration file
+
+### What's NOT Implemented
+- **Selective preservation**: Cannot choose specific metadata fields to keep
+- **Field-level control**: Cannot preserve copyright while removing GPS, etc.
+- **Object configuration**: The `preserveMetadata` option only accepts boolean values
+
+### Technical Note
+The selective preservation feature is marked as "TODO" in the codebase (image-processor.js:22) and would require additional implementation work to support object-based configuration for field-level control.
 
 ## Technical Specification
 
-### Architecture
-The metadata preservation system will be integrated into the image processing pipeline, using Sharp's built-in metadata handling capabilities.
+### Current Architecture
+The metadata preservation system is integrated into the image processing pipeline, using Sharp's built-in metadata handling capabilities with boolean control only.
 
 ### Components
 - **MetadataHandler**: Processes metadata based on configuration
