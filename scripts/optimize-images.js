@@ -81,11 +81,18 @@ async function processImages() {
     
     // Load any saved state
     const savedState = await errorRecoveryManager.loadState();
-    const filesToProcess = imageFiles;
+    let startIndex = 0;
+    
+    if (resumeFlag && savedState && savedState.checkpoint) {
+      startIndex = savedState.checkpoint.processedCount || 0;
+      logger.log(`📂 Resuming from previous state... (starting at image ${startIndex + 1})`);
+    }
+    
+    const filesToProcess = imageFiles.slice(startIndex);
     
     for (let i = 0; i < filesToProcess.length; i++) {
       const file = filesToProcess[i];
-      const absoluteIndex = i;
+      const absoluteIndex = startIndex + i;
       
       progressManager.setFilename(file);
       
@@ -101,22 +108,15 @@ async function processImages() {
           ...imageQuality
         };
         
-        const recoveryResult = await errorRecoveryManager.processWithRecovery(
-          async () => {
-            return await optimizer.optimizeImage(
-              path.join(INPUT_DIR, file), 
-              file,
-              { 
-                forceReprocess, 
-                pullLfs,
-                quality: mergedQuality
-              }
-            );
-          },
-          { file }
+        const result = await optimizer.optimizeImage(
+          path.join(INPUT_DIR, file), 
+          file,
+          { 
+            forceReprocess, 
+            pullLfs,
+            quality: mergedQuality
+          }
         );
-        
-        const result = recoveryResult.success ? recoveryResult.result : 'error';
         
         switch (result) {
           case 'processed': 
@@ -157,7 +157,7 @@ async function processImages() {
         
       } catch (error) {
         stats.errors++;
-        progressManager.completeFile(file, 'error');
+        progressManager.increment({ status: 'error', filename: file });
         await errorRecoveryManager.logError(file, error);
         
         if (!continueOnError) {

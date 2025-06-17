@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs').promises;
 
 class ImageOptimizer {
   constructor(config = {}) {
@@ -90,6 +91,10 @@ class ImageOptimizer {
     }
 
     try {
+      // Ensure output directory exists
+      const outputDir = path.dirname(path.join(this.config.outputDir, filename));
+      await fs.mkdir(outputDir, { recursive: true });
+      
       // Handle special cases
       if (ext === '.gif') {
         await this.fileOperations.copyFile(inputPath, path.join(this.config.outputDir, filename));
@@ -120,7 +125,11 @@ class ImageOptimizer {
         }
         
         if (configs.length > 0) {
-          await this.imageProcessor.processImage(inputPath, configs);
+          const results = await this.imageProcessor.processImage(inputPath, configs);
+          const failed = results.filter(r => !r.success);
+          if (failed.length > 0) {
+            throw new Error(`Failed to process ${filename}: ${failed[0].error}`);
+          }
           this.logger.log(`✅ Optimized ${filename}`);
         }
         return 'processed';
@@ -129,7 +138,11 @@ class ImageOptimizer {
       // Process based on configured formats
       const configs = this.getProcessingConfigs(filename, inputPath);
       if (configs.length > 0) {
-        await this.imageProcessor.processImage(inputPath, configs);
+        const results = await this.imageProcessor.processImage(inputPath, configs);
+        const failed = results.filter(r => !r.success);
+        if (failed.length > 0) {
+          throw new Error(`Failed to process ${filename}: ${failed[0].error}`);
+        }
         this.logger.log(`✅ Optimized ${filename}`);
       }
       

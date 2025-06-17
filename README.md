@@ -21,11 +21,13 @@ A high-performance image optimization pipeline that uses GitHub as a CDN. Drop i
 ## 🚀 Quick Start
 
 ```bash
-# Optimize images
-make optimize
+# Optimize images (runs in Docker - no local setup needed!)
+npm run optimize
 ```
 
 Images go in `original/`, optimized versions appear in `optimized/`. That's it!
+
+**All commands run in Docker by default**, ensuring consistency across all environments. No need to install Node.js, Sharp, or other dependencies locally!
 
 ## 📖 Documentation
 
@@ -38,15 +40,33 @@ Images go in `original/`, optimized versions appear in `optimized/`. That's it!
 
 ### Basic Commands
 
+All commands run in Docker containers, so you don't need Node.js or any dependencies installed locally!
+
 ```bash
 # Optimize new/changed images
-make optimize
+npm run optimize
 
-# Force reprocess all images
-make optimize-force
+# Force reprocess all images  
+npm run optimize:force
+
+# Pull Git LFS files and optimize
+npm run optimize:lfs
+
+# Watch for changes (development)
+npm run optimize:watch
 
 # Run tests
-make test
+npm test
+```
+
+#### Advanced Usage
+
+```bash
+# Run with custom flags (add after --)
+docker compose run --rm optimize -- --quiet --no-thumbnails
+
+# Use local Node.js instead of Docker (requires dependencies)
+npm run optimize:local
 ```
 
 ### Configuration

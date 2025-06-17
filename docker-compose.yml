@@ -32,6 +32,21 @@ services:
       - ./.git:/app/.git
     command: node scripts/optimize-images.js --pull-lfs
 
+  # Service for running optimization in watch mode
+  optimize-watch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./original:/app/original:ro
+      - ./optimized:/app/optimized
+      - ./.git:/app/.git:ro
+      - ./scripts:/app/scripts:ro  # Allow live reload of scripts
+      - ./src:/app/src:ro          # Allow live reload of source
+    command: node scripts/optimize-images.js --watch
+    stdin_open: true
+    tty: true
+
   # Service for running tests
   test:
     build:
