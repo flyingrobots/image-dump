@@ -309,7 +309,25 @@ async function main() {
     const fileReader = { readFile: fs.readFile };
     const fileStats = { stat: fs.stat };
     const commandExecutor = { 
-      exec: (command) => execSync(command, { stdio: 'inherit' }) 
+      exec: (command) => {
+        try {
+          // Use pipe instead of inherit to avoid hanging in non-TTY environments
+          const result = execSync(command, { 
+            stdio: ['pipe', 'pipe', 'pipe'],
+            encoding: 'utf8'
+          });
+          if (result) {
+            logger.log(result.trim());
+          }
+          return result;
+        } catch (error) {
+          // Log the error output if available
+          if (error.stderr) {
+            logger.error(error.stderr.toString().trim());
+          }
+          throw error;
+        }
+      }
     };
     const fileOperations = { copyFile: fs.copyFile };
     
