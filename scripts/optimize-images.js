@@ -1,10 +1,21 @@
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
+const { execSync } = require('child_process');
+
+// Import our modules
+const GitLfsDetector = require('../src/git-lfs-detector');
+const GitLfsPuller = require('../src/git-lfs-puller');
+const FileTimestampChecker = require('../src/file-timestamp-checker');
+const ImageProcessor = require('../src/image-processor');
+const OutputPathGenerator = require('../src/output-path-generator');
+const ImageOptimizer = require('../src/image-optimizer');
 const ConfigLoader = require('../src/config-loader');
 const ErrorRecoveryManager = require('../src/error-recovery-manager');
 const ProgressManager = require('../src/progress-manager');
 const QualityRulesEngine = require('../src/quality-rules-engine');
+
+const INPUT_DIR = 'original';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -14,6 +25,7 @@ const noThumbnails = args.includes('--no-thumbnails');
 const continueOnError = args.includes('--continue-on-error');
 const resumeFlag = args.includes('--resume');
 const quietMode = args.includes('--quiet') || args.includes('-q');
+const watchMode = args.includes('--watch');
 
 // Extract error recovery options
 const maxRetriesArg = args.find(arg => arg.startsWith('--max-retries='));
@@ -25,690 +37,340 @@ const retryDelay = retryDelayArg ? parseInt(retryDelayArg.split('=')[1]) : 1000;
 const errorLogArg = args.find(arg => arg.startsWith('--error-log='));
 const errorLog = errorLogArg ? errorLogArg.split('=')[1] : 'image-optimization-errors.log';
 
-// Will be populated by config
-let config = {};
+// Configuration and components will be initialized in main
+let config = null;
+let progressManager = null;
+let errorRecoveryManager = null;
+let qualityRulesEngine = null;
+let logger = null;
+let optimizer = null;
 
-async function getFileModTime(filePath) {
+async function processImages() {
   try {
-    const stats = await fs.stat(filePath);
-    return stats.mtime;
-  } catch {
-    return null;
-  }
-}
-
-async function shouldProcessImage(inputPath, outputPaths) {
-  if (forceReprocess) return true;
-  
-  const inputModTime = await getFileModTime(inputPath);
-  if (!inputModTime) return false;
-
-  for (const outputPath of outputPaths) {
-    const outputModTime = await getFileModTime(outputPath);
-    if (!outputModTime || inputModTime > outputModTime) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-async function isGitLfsPointer(filePath) {
-  try {
-    const content = await fs.readFile(filePath, 'utf8');
-    // Git LFS pointer files start with this version line
-    return content.startsWith('version https://git-lfs.github.com/spec/v1');
-  } catch {
-    // If we can't read as text, it's likely a binary file (actual image)
-    return false;
-  }
-}
-
-function applyMetadataSettings(sharpInstance, config) {
-  if (config.preserveMetadata === true) {
-    return sharpInstance.withMetadata();
-  } else if (typeof config.preserveMetadata === 'object') {
-    // TODO: Implement selective preservation
-    return sharpInstance.withMetadata();
-  }
-  // Default: strip metadata (Sharp's default behavior)
-  return sharpInstance;
-}
-
-async function getOutputPaths(relativePath) {
-  const dir = path.dirname(relativePath);
-  const basename = path.basename(relativePath);
-  const name = path.parse(basename).name;
-  const ext = path.parse(basename).ext.toLowerCase();
-  const paths = [];
-  
-  // Generate paths based on configured formats
-  if (config.formats.includes('webp')) {
-    paths.push(path.join(config.outputDir, dir, `${name}.webp`));
-  }
-  
-  if (config.formats.includes('avif')) {
-    paths.push(path.join(config.outputDir, dir, `${name}.avif`));
-  }
-  
-  if (config.formats.includes('original') || 
-      config.formats.includes('jpeg') || 
-      config.formats.includes('png')) {
-    if (ext === '.gif' || ext === '.webp') {
-      paths.push(path.join(config.outputDir, relativePath));
-    } else if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') {
-      paths.push(path.join(config.outputDir, relativePath));
-    }
-  }
-  
-  if (config.generateThumbnails && !noThumbnails && 
-      (config.formats.includes('webp') || config.formats.includes('avif'))) {
-    paths.push(path.join(config.outputDir, dir, `${name}-thumb.webp`));
-  }
-  
-  return paths;
-}
-
-async function optimizeImage(inputPath, relativePath, imageQuality = null) {
-  const dir = path.dirname(relativePath);
-  const basename = path.basename(relativePath);
-  const name = path.parse(basename).name;
-  const ext = path.parse(basename).ext.toLowerCase();
-  
-  // Use provided quality or fall back to config
-  const quality = imageQuality || config.quality;
-  
-  // Check for Git LFS pointer
-  if (await isGitLfsPointer(inputPath)) {
-    if (pullLfs) {
-      console.log(`📥 Pulling LFS file: ${relativePath}`);
-      const { execSync } = require('child_process');
-      try {
-        execSync(`git lfs pull --include="original/${relativePath}"`, { 
-          stdio: 'inherit' 
-        });
-        
-        // Check again after pull
-        if (await isGitLfsPointer(inputPath)) {
-          console.error(`❌ Failed to pull LFS file: ${relativePath}`);
-          return 'lfs-error';
-        }
-      } catch (error) {
-        console.error(`❌ Error pulling LFS file: ${relativePath} - ${error.message}`);
-        return 'lfs-error';
-      }
-    } else {
-      if (!quietMode) {
-        console.log(`⚠️  Skipping ${relativePath} (Git LFS pointer file - use --pull-lfs flag or run 'git lfs pull')`);
-      }
-      return 'lfs-pointer';
-    }
-  }
-
-  // Ensure output subdirectory exists
-  const outputSubdir = path.join(config.outputDir, dir);
-  if (dir !== '.') {
-    await fs.mkdir(outputSubdir, { recursive: true });
-  }
-  
-  const outputPaths = await getOutputPaths(relativePath);
-  
-  // Check if processing is needed
-  const needsProcessing = await shouldProcessImage(inputPath, outputPaths);
-  
-  if (!needsProcessing) {
-    if (!quietMode) {
-      // Progress bar will show skipped status
-    }
-    return 'skipped';
-  }
-
-  try {
-    // Handle GIF files - just copy them
-    if (ext === '.gif') {
-      await fs.copyFile(inputPath, path.join(config.outputDir, relativePath));
-      if (!quietMode) {
-        // Progress bar will show the status
-      }
-      return 'processed';
-    }
-
-    // For WebP input, handle specially
-    if (ext === '.webp') {
-      const tasks = [];
-      
-      if (config.formats.includes('webp') || config.formats.includes('original')) {
-        tasks.push(
-          applyMetadataSettings(
-            sharp(inputPath)
-              .resize(2000, 2000, {
-                fit: 'inside',
-                withoutEnlargement: true
-              }),
-            config
-          )
-          .webp({ quality: quality.webp })
-          .toFile(path.join(config.outputDir, relativePath))
-        );
-      }
-      
-      if (config.generateThumbnails && !noThumbnails) {
-        tasks.push(
-          sharp(inputPath)
-            .resize(config.thumbnailWidth, config.thumbnailWidth, {
-              fit: 'cover',
-              position: 'centre'
-            })
-            .webp({ quality: quality.webp })
-            .toFile(path.join(outputSubdir, `${name}-thumb.webp`))
-        );
-      }
-      
-      if (tasks.length > 0) {
-        await Promise.all(tasks);
-      }
-      
-      // Validate output files
-      for (const outputPath of outputPaths) {
-        try {
-          await sharp(outputPath).metadata();
-        } catch (validationError) {
-          console.error(`❌ Validation failed for ${relativePath}: ${validationError.message}`);
-          return 'error';
-        }
-      }
-      
-      console.log(`✅ Optimized ${relativePath}`);
-      return 'processed';
-    }
-
-    // For other formats, process based on configuration
-    const tasks = [];
-    
-    if (config.formats.includes('original') || 
-        (ext === '.png' && config.formats.includes('png')) ||
-        ((ext === '.jpg' || ext === '.jpeg') && config.formats.includes('jpeg'))) {
-      const isJpeg = ext === '.jpg' || ext === '.jpeg';
-      tasks.push(
-        applyMetadataSettings(
-          sharp(inputPath)
-            .resize(2000, 2000, {
-              fit: 'inside',
-              withoutEnlargement: true
-            }),
-          config
-        )
-          [isJpeg ? 'jpeg' : 'png'](isJpeg ? { quality: quality.jpeg } : {})
-          .toFile(path.join(config.outputDir, relativePath))
-      );
-    }
-    
-    if (config.formats.includes('avif')) {
-      tasks.push(
-        applyMetadataSettings(
-          sharp(inputPath)
-            .resize(2000, 2000, {
-              fit: 'inside',
-              withoutEnlargement: true
-            }),
-          config
-        )
-        .avif({ quality: quality.avif })
-        .toFile(path.join(outputSubdir, `${name}.avif`))
-      );
-    }
-    
-    if (config.formats.includes('webp')) {
-      tasks.push(
-        applyMetadataSettings(
-          sharp(inputPath)
-            .resize(2000, 2000, {
-              fit: 'inside',
-              withoutEnlargement: true
-            }),
-          config
-        )
-        .webp({ quality: quality.webp })
-        .toFile(path.join(outputSubdir, `${name}.webp`))
-      );
-    }
-    
-    if (config.generateThumbnails && !noThumbnails && 
-        (config.formats.includes('webp') || config.formats.includes('avif'))) {
-      tasks.push(
-        sharp(inputPath)
-          .resize(config.thumbnailWidth, config.thumbnailWidth, {
-            fit: 'cover',
-            position: 'centre'
-          })
-          .webp({ quality: quality.webp })
-          .toFile(path.join(outputSubdir, `${name}-thumb.webp`))
-      );
-    }
-    
-    if (tasks.length > 0) {
-      await Promise.all(tasks);
-    }
-    
-    // Validate all output files exist and are valid
-    for (const outputPath of outputPaths) {
-      try {
-        await sharp(outputPath).metadata();
-      } catch (validationError) {
-        console.error(`❌ Validation failed for ${relativePath}: ${validationError.message}`);
-        return 'error';
-      }
-    }
-    
-    if (!quietMode) {
-      // Progress bar will show the status
-    }
-    return 'processed';
-  } catch (error) {
-    if (!quietMode) {
-      console.error(`❌ Error processing ${relativePath}: ${error.message}`);
-    }
-    return 'error';
-  }
-}
-
-async function getDirectorySize(dirPath) {
-  let totalSize = 0;
-  try {
-    const files = await fs.readdir(dirPath);
-    for (const file of files) {
-      const filePath = path.join(dirPath, file);
-      const stats = await fs.stat(filePath);
-      if (stats.isFile()) {
-        totalSize += stats.size;
-      }
-    }
-  } catch (error) {
-    // Directory might not exist yet
-  }
-  return totalSize;
-}
-
-function formatBytes(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-async function main() {
-  try {
-    // Initialize error recovery manager
-    const errorRecovery = new ErrorRecoveryManager({
-      continueOnError,
-      maxRetries,
-      retryDelay,
-      errorLog,
-      exponentialBackoff: true
-    });
-    
-    // Initialize progress manager
-    const progress = new ProgressManager({
-      quiet: quietMode,
-      showSpeed: true,
-      showETA: true
-    });
-    
-    // Handle graceful shutdown
-    const cleanup = () => {
-      progress.cleanup();
-      process.exit(0);
-    };
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-    
-    // Check if we're resuming from a previous run
-    let resumeState = null;
-    if (resumeFlag) {
-      resumeState = await errorRecovery.loadState();
-      if (resumeState && !quietMode) {
-        console.log('📂 Resuming from previous state...');
-        console.log(`   Previously processed: ${resumeState.progress.processed} files`);
-        console.log(`   Remaining: ${resumeState.progress.remaining} files\n`);
-      } else if (!resumeState && !quietMode) {
-        console.log('⚠️  No previous state found, starting fresh\n');
-      }
-    }
-    
-    // Load configuration
-    const configLoader = new ConfigLoader();
-    
-    // Build CLI args from parsed flags
-    const cliArgs = {};
-    if (noThumbnails) {
-      cliArgs.generateThumbnails = false;
-    }
-    
-    try {
-      config = await configLoader.loadConfig(process.cwd(), cliArgs);
-      
-      // Merge with error recovery config if present
-      if (config.errorRecovery) {
-        Object.assign(errorRecovery, {
-          continueOnError: config.errorRecovery.continueOnError ?? errorRecovery.continueOnError,
-          maxRetries: config.errorRecovery.maxRetries ?? errorRecovery.maxRetries,
-          retryDelay: config.errorRecovery.retryDelay ?? errorRecovery.retryDelay,
-          exponentialBackoff: config.errorRecovery.exponentialBackoff ?? errorRecovery.exponentialBackoff
-        });
-      }
-    
-    } catch (error) {
-      console.error(`❌ Configuration error: ${error.message}`);
-      process.exit(1);
-    }
-    
-    // Initialize quality rules engine
-    const qualityRules = new QualityRulesEngine(config.qualityRules || []);
-    
-    // Ensure directories exist
-    await fs.mkdir('original', { recursive: true });
     await fs.mkdir(config.outputDir, { recursive: true });
-
-    // Get list of images to process recursively
-    async function getImagesRecursively(dir, baseDir = dir) {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-      const files = [];
-      
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          files.push(...await getImagesRecursively(fullPath, baseDir));
-        } else {
-          const ext = path.extname(entry.name).toLowerCase();
-          if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
-            // Store relative path from baseDir
-            files.push(path.relative(baseDir, fullPath));
-          }
-        }
-      }
-      
-      return files;
-    }
     
-    const imageFiles = await getImagesRecursively('original');
-
+    const files = await fs.readdir(INPUT_DIR);
+    const imageFiles = files.filter(f => 
+      /\.(jpg|jpeg|png|gif|webp)$/i.test(f)
+    );
+    
     if (imageFiles.length === 0) {
-      console.log('No images found in the original/ directory');
+      console.log('No images found in the original directory');
       return;
     }
-
-    if (!quietMode) {
-      console.log(`Found ${imageFiles.length} images to process...`);
-      if (config.formats.length < 3 || !config.generateThumbnails) {
-        console.log(`Using configuration: formats=[${config.formats.join(', ')}], thumbnails=${config.generateThumbnails}`);
-      }
-      console.log('');
-    }
-
-    // Process images
-    let processed = 0;
-    let skipped = 0;
-    let lfsPointers = 0;
-    let lfsErrors = 0;
-    let errors = 0;
-    const startTime = Date.now();
-
-    // Determine which files to process
-    let filesToProcess = imageFiles;
-    if (resumeState && resumeState.files.pending.length > 0) {
-      // Filter to only pending files if resuming
-      filesToProcess = imageFiles.filter(file => 
-        resumeState.files.pending.includes(file) || !errorRecovery.isFileProcessed(path.join('original', file))
-      );
-    }
-
-    // Save initial state
-    await errorRecovery.saveState({
-      startedAt: resumeState?.startedAt || new Date().toISOString(),
-      total: imageFiles.length,
-      pending: filesToProcess.map(f => path.join('original', f)),
-      configuration: config
-    });
     
-    // Start progress bar
-    progress.start(filesToProcess.length, resumeFlag ? 'Resuming batch processing...' : '');
-
-    for (const [index, file] of filesToProcess.entries()) {
-      const inputPath = path.join('original', file);
+    // Initialize progress manager
+    progressManager.start(imageFiles.length);
+    
+    logger.log(`Found ${imageFiles.length} images to process...`);
+    if (forceReprocess) {
+      logger.log('Force reprocessing enabled - all images will be regenerated');
+    }
+    if (pullLfs) {
+      logger.log('Git LFS auto-pull enabled - pointer files will be downloaded');
+    }
+    logger.log('');
+    
+    const stats = {
+      processed: 0,
+      skipped: 0,
+      errors: 0,
+      lfsPointers: 0,
+      lfsErrors: 0
+    };
+    
+    // Load any saved state
+    const savedState = await errorRecoveryManager.loadState();
+    const filesToProcess = imageFiles;
+    
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const file = filesToProcess[i];
+      const absoluteIndex = i;
       
-      // Skip if already processed in resume mode
-      if (errorRecovery.isFileProcessed(inputPath)) {
-        const previousResult = errorRecovery.processedFiles.get(inputPath);
-        if (previousResult && previousResult.status === 'success') {
-          skipped++;
-          progress.update(index + 1, { 
-            filename: file, 
-            status: 'skipped' 
-          });
-        } else {
-          errors++;
-          progress.update(index + 1, { 
-            filename: file, 
-            status: 'error' 
-          });
-        }
-        continue;
-      }
+      progressManager.setFilename(file);
       
-      // Update progress to show current file
-      progress.setFilename(file);
-      
-      // Get image metadata for quality rules
-      let metadata = null;
       try {
-        metadata = await sharp(inputPath).metadata();
-      } catch (err) {
-        // If we can't read metadata, quality rules based on size won't apply
-      }
-      
-      // Get quality settings for this specific image
-      const imageQuality = qualityRules.getQualityForImage(file, metadata, config.quality);
-      
-      // Log if custom quality is being used (debug)
-      if (JSON.stringify(imageQuality) !== JSON.stringify(config.quality) && !quietMode) {
-        const matches = qualityRules.explainMatch(file, metadata);
-        if (matches.length > 0) {
-          console.log(`🎨 Applying custom quality for ${file}:`);
-          matches.forEach(match => {
-            console.log(`  - Rule: ${match.criteria}`);
-            console.log(`    Quality: ${JSON.stringify(match.quality)}`);
+        // Apply quality rules for this specific file
+        const imageQuality = await qualityRulesEngine.getQualityForImage(
+          path.join(INPUT_DIR, file)
+        );
+        
+        // Merge with base quality settings
+        const mergedQuality = {
+          ...config.quality,
+          ...imageQuality
+        };
+        
+        const recoveryResult = await errorRecoveryManager.processWithRecovery(
+          async () => {
+            return await optimizer.optimizeImage(
+              path.join(INPUT_DIR, file), 
+              file,
+              { 
+                forceReprocess, 
+                pullLfs,
+                quality: mergedQuality
+              }
+            );
+          },
+          { file }
+        );
+        
+        const result = recoveryResult.success ? recoveryResult.result : 'error';
+        
+        switch (result) {
+          case 'processed': 
+            stats.processed++; 
+            progressManager.increment({ status: 'processed', filename: file });
+            break;
+          case 'skipped': 
+            stats.skipped++; 
+            progressManager.increment({ status: 'skipped', filename: file });
+            break;
+          case 'error': 
+            stats.errors++; 
+            progressManager.increment({ status: 'error', filename: file });
+            if (!continueOnError) {
+              throw new Error(`Failed to process ${file}`);
+            }
+            break;
+          case 'lfs-pointer': 
+            stats.lfsPointers++; 
+            progressManager.increment({ status: 'skipped', filename: file });
+            break;
+          case 'lfs-error': 
+            stats.lfsErrors++; 
+            progressManager.increment({ status: 'error', filename: file });
+            break;
+        }
+        
+        // Record processed file
+        errorRecoveryManager.recordProcessedFile(file, { status: result });
+        
+        // Save state periodically
+        if (i % 10 === 0) {
+          await errorRecoveryManager.saveState({ 
+            processedCount: i + 1,
+            totalCount: imageFiles.length 
           });
         }
+        
+      } catch (error) {
+        stats.errors++;
+        progressManager.completeFile(file, 'error');
+        await errorRecoveryManager.logError(file, error);
+        
+        if (!continueOnError) {
+          throw error;
+        }
       }
-      
-      // Wrap the optimization in error recovery
-      const { success, result: optimizationResult, attempts } = await errorRecovery.processWithRecovery(
-        async () => {
-          const result = await optimizeImage(inputPath, file, imageQuality);
-          if (result === 'error' || result === 'lfs-error') {
-            throw new Error(`Optimization failed with result: ${result}`);
-          }
-          return result;
-        },
-        { file: inputPath }
-      );
-      
-      const result = success ? optimizationResult : 'error';
-      
-      // Record the result
-      errorRecovery.recordProcessedFile(inputPath, {
-        status: success ? 'success' : 'failed',
-        result,
-        attempts,
-        error: success ? null : 'Optimization failed'
-      });
-      
-      // Update state periodically
-      if ((processed + errors + skipped) % 10 === 0) {
-        await errorRecovery.saveState({
-          startedAt: resumeState?.startedAt || new Date().toISOString(),
-          total: imageFiles.length,
-          pending: filesToProcess.slice(index + 1).map(f => path.join('original', f)),
-          configuration: config
-        });
-      }
-      
-      // Update progress and stats
-      let statusForProgress = 'processed';
-      
-      switch (result) {
-        case 'processed':
-          processed++;
-          statusForProgress = 'processed';
-          break;
-        case 'skipped':
-          skipped++;
-          statusForProgress = 'skipped';
-          break;
-        case 'lfs-pointer':
-          lfsPointers++;
-          statusForProgress = 'skipped';
-          break;
-        case 'lfs-error':
-          lfsErrors++;
-          errors++;
-          statusForProgress = 'error';
-          break;
-        case 'error':
-          errors++;
-          statusForProgress = 'error';
-          break;
-      }
-      
-      // Update progress bar
-      progress.update(index + 1, {
-        filename: file,
-        status: statusForProgress
+    }
+    
+    // Finalize progress (don't show summary as we'll show our own)
+    progressManager.finish(false);
+    
+    // Clean up error recovery state if all files processed successfully
+    if (stats.errors === 0) {
+      await errorRecoveryManager.clearState();
+    } else {
+      // Save final state
+      await errorRecoveryManager.saveState({ 
+        processedCount: imageFiles.length,
+        totalCount: imageFiles.length 
       });
     }
-
-    // Final state save
-    await errorRecovery.saveState({
-      startedAt: resumeState?.startedAt || new Date().toISOString(),
-      total: imageFiles.length,
-      pending: [],
-      configuration: config
-    });
     
-    // Finish progress bar
-    progress.finish(false); // Don't show built-in summary
-    
-    // Summary
+    // Show summary
     if (!quietMode) {
       console.log('\n' + '='.repeat(50));
       console.log('✅ Optimization complete!');
-      console.log(`   Processed: ${processed} images`);
-      console.log(`   Skipped: ${skipped} images (already up to date)`);
-      if (lfsPointers > 0) {
-        console.log(`   LFS pointers: ${lfsPointers} files (use --pull-lfs to process)`);
+      console.log(`   Processed: ${stats.processed} images`);
+      console.log(`   Skipped: ${stats.skipped} images (already up to date)`);
+      if (stats.lfsPointers > 0) {
+        console.log(`   Git LFS pointers: ${stats.lfsPointers} files (use --pull-lfs flag)`);
       }
-      if (lfsErrors > 0) {
-        console.log(`   LFS errors: ${lfsErrors} files`);
+      if (stats.lfsErrors > 0) {
+        console.log(`   Git LFS errors: ${stats.lfsErrors} files`);
       }
-      if (errors > 0) {
-        console.log(`   Errors: ${errors} images`);
-        
-        // Generate error report
-        const report = errorRecovery.generateReport();
-        if (report.errors.length > 0) {
-          console.log(`   Error details saved to: ${report.errorLogPath}`);
-        }
+      if (stats.errors > 0) {
+        console.log(`   Errors: ${stats.errors} images`);
+        console.log(`   Error details logged to: ${errorLog}`);
       }
-      
-      // Show timing
-      const elapsedTime = Date.now() - startTime;
-      const seconds = Math.floor(elapsedTime / 1000);
-      const minutes = Math.floor(seconds / 60);
-      if (minutes > 0) {
-        console.log(`   Time: ${minutes}m ${seconds % 60}s`);
-      } else {
-        console.log(`   Time: ${seconds}s`);
-      }
-    }
-    
-    // Calculate and display size savings
-    if (processed > 0) {
-      let processedOriginalSize = 0;
-      let processedOptimizedSize = 0;
-      
-      // Calculate sizes only for processed files
-      for (const file of imageFiles) {
-        const inputPath = path.join('original', file);
-        const name = path.parse(file).name;
-        const ext = path.parse(file).ext.toLowerCase();
-        
-        try {
-          const inputStats = await fs.stat(inputPath);
-          processedOriginalSize += inputStats.size;
-          
-          // Check main output file (not thumbnails or alternate formats)
-          const mainOutputPath = path.join(config.outputDir, ext === '.gif' ? file : 
-            (ext === '.webp' ? file : `${name}${ext === '.png' ? '.png' : '.jpg'}`));
-          
-          try {
-            const outputStats = await fs.stat(mainOutputPath);
-            processedOptimizedSize += outputStats.size;
-          } catch {
-            // Output file might not exist if there was an error
-          }
-        } catch {
-          // Input file might not exist
-        }
-      }
-      
-      const savedBytes = processedOriginalSize - processedOptimizedSize;
-      const savedPercent = processedOriginalSize > 0 ? ((savedBytes / processedOriginalSize) * 100).toFixed(1) : 0;
-      
-      if (!quietMode) {
-        console.log(`\n📊 Size Statistics:`);
-        console.log(`   Original size: ${formatBytes(processedOriginalSize)}`);
-        console.log(`   Optimized size: ${formatBytes(processedOptimizedSize)}`);
-        if (savedBytes > 0) {
-          console.log(`   Space saved: ${formatBytes(savedBytes)} (${savedPercent}%)`);
-        } else {
-          console.log(`   Size increased: ${formatBytes(Math.abs(savedBytes))} (+${Math.abs(savedPercent)}%)`);
-        }
-      }
-    }
-    
-    if (!quietMode) {
       console.log('='.repeat(50));
     }
     
-    // Clean up state file if everything was successful
-    if (errors === 0 && !resumeFlag) {
-      await errorRecovery.clearState();
-    } else if (errors > 0 && continueOnError) {
-      console.log(`\n⚠️  Some images failed to process. Run with --resume to retry failed images.`);
-    }
-    
-    // Exit with error code if there were errors and not in continue-on-error mode
-    if (errors > 0 && !continueOnError) {
-      process.exit(1);
-    }
+    return stats;
   } catch (error) {
+    progressManager.finish();
     console.error('Fatal error:', error);
+    await errorRecoveryManager.logError('FATAL', error);
     process.exit(1);
   }
 }
 
-// Export functions for testing
-module.exports = {
-  isGitLfsPointer,
-  shouldProcessImage,
-  optimizeImage,
-  getDirectorySize,
-  formatBytes,
-  main
-};
+async function watchForChanges() {
+  const chokidar = require('chokidar');
+  
+  console.log('👀 Watching for changes in the original directory...');
+  console.log('Press Ctrl+C to stop\n');
+  
+  const watcher = chokidar.watch(INPUT_DIR, {
+    ignored: /(^|[\/\\])\../,
+    persistent: true,
+    awaitWriteFinish: {
+      stabilityThreshold: 2000,
+      pollInterval: 100
+    }
+  });
+  
+  watcher.on('add', async (filePath) => {
+    const file = path.basename(filePath);
+    if (!/\.(jpg|jpeg|png|gif|webp)$/i.test(file)) return;
+    
+    console.log(`\n📸 New image detected: ${file}`);
+    
+    try {
+      const imageQuality = await qualityRulesEngine.getQualityForImage(filePath);
+      const mergedQuality = {
+        ...config.quality,
+        ...imageQuality
+      };
+      
+      const result = await optimizer.optimizeImage(
+        filePath,
+        file,
+        { 
+          forceReprocess: true,
+          pullLfs,
+          quality: mergedQuality
+        }
+      );
+      
+      if (result === 'processed') {
+        console.log(`✅ Optimized ${file}`);
+      } else if (result === 'error') {
+        console.error(`❌ Failed to optimize ${file}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error processing ${file}:`, error.message);
+    }
+  });
+  
+  watcher.on('change', async (filePath) => {
+    const file = path.basename(filePath);
+    if (!/\.(jpg|jpeg|png|gif|webp)$/i.test(file)) return;
+    
+    console.log(`\n🔄 Image changed: ${file}`);
+    
+    try {
+      const imageQuality = await qualityRulesEngine.getQualityForImage(filePath);
+      const mergedQuality = {
+        ...config.quality,
+        ...imageQuality
+      };
+      
+      const result = await optimizer.optimizeImage(
+        filePath,
+        file,
+        { 
+          forceReprocess: true,
+          pullLfs,
+          quality: mergedQuality
+        }
+      );
+      
+      if (result === 'processed') {
+        console.log(`✅ Re-optimized ${file}`);
+      } else if (result === 'error') {
+        console.error(`❌ Failed to optimize ${file}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error processing ${file}:`, error.message);
+    }
+  });
+  
+  watcher.on('error', error => {
+    console.error('❌ Watcher error:', error);
+  });
+}
 
-// Only run main if this file is executed directly
+async function main() {
+  try {
+    // Load configuration
+    const configLoader = new ConfigLoader();
+    config = await configLoader.loadConfig();
+    
+    // Apply CLI overrides
+    if (noThumbnails) {
+      config.generateThumbnails = false;
+    }
+    
+    // Create dependencies
+    const fileReader = { readFile: fs.readFile };
+    const fileStats = { stat: fs.stat };
+    const commandExecutor = { 
+      exec: (command) => execSync(command, { stdio: 'inherit' }) 
+    };
+    const fileOperations = { copyFile: fs.copyFile };
+    
+    // Create progress manager
+    progressManager = new ProgressManager({ quiet: quietMode });
+    
+    // Create error recovery manager
+    const errorRecoveryOptions = {
+      continueOnError: continueOnError || config.errorRecovery?.continueOnError || true,
+      maxRetries: config.errorRecovery?.maxRetries || maxRetries,
+      retryDelay: config.errorRecovery?.retryDelay || retryDelay,
+      exponentialBackoff: config.errorRecovery?.exponentialBackoff !== false,
+      errorLog: config.errorRecovery?.errorLog || errorLog,
+      resume: resumeFlag
+    };
+    errorRecoveryManager = new ErrorRecoveryManager(errorRecoveryOptions);
+    
+    // Create quality rules engine
+    qualityRulesEngine = new QualityRulesEngine(config.qualityRules || []);
+    
+    // Create logger that respects quiet mode
+    logger = {
+      log: (...args) => !quietMode && console.log(...args),
+      error: (...args) => console.error(...args)
+    };
+    
+    // Wire up components
+    const gitLfsDetector = new GitLfsDetector(fileReader);
+    const gitLfsPuller = new GitLfsPuller(commandExecutor);
+    const timestampChecker = new FileTimestampChecker(fileStats);
+    const imageProcessor = new ImageProcessor(sharp);
+    const pathGenerator = new OutputPathGenerator(config.outputDir);
+    
+    // Create optimizer with full config
+    optimizer = new ImageOptimizer({
+      ...config,
+      gitLfsDetector,
+      gitLfsPuller,
+      timestampChecker,
+      imageProcessor,
+      pathGenerator,
+      fileOperations,
+      logger
+    });
+    
+    if (watchMode) {
+      // Run initial optimization
+      await processImages();
+      // Start watching
+      await watchForChanges();
+    } else {
+      await processImages();
+    }
+  } catch (error) {
+    console.error('Failed to initialize:', error);
+    process.exit(1);
+  }
+}
+
 if (require.main === module) {
   main().catch(console.error);
 }
+
+module.exports = { main };
