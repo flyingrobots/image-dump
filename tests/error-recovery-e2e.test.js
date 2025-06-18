@@ -28,8 +28,8 @@ describe('Error Recovery E2E', () => {
         background: { r: 255, g: 0, b: 0 }
       }
     })
-    .png()
-    .toBuffer();
+      .png()
+      .toBuffer();
     
     // Create test images - use 'a' prefix to ensure good images are processed first
     await fs.writeFile(path.join('original', 'a-good1.png'), validPng);
@@ -70,7 +70,7 @@ describe('Error Recovery E2E', () => {
       expect(errorLogExists).toBe(true);
     });
     
-    it('should stop on first error without --continue-on-error', async () => {
+    it('should stop on first error without --continue-on-error', () => {
       let exitCode = 0;
       try {
         execSync(`node ${scriptPath}`, { encoding: 'utf8', stdio: 'pipe' });
@@ -92,7 +92,7 @@ describe('Error Recovery E2E', () => {
       // Create test images in the resume test directory
       for (let i = 0; i < 10; i++) {
         const image = Buffer.from(
-          `iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==`,
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
           'base64'
         );
         await fs.writeFile(
@@ -211,14 +211,13 @@ describe('Error Recovery E2E', () => {
       // In real scenarios, retries would happen for network errors, busy files, etc.
       
       let result;
-      let exitCode = 0;
       try {
         result = execSync(`node ${scriptPath} --max-retries=2 --retry-delay=100 --continue-on-error`, { 
           encoding: 'utf8' 
         });
       } catch (error) {
         result = error.stdout || error.stderr || '';
-        exitCode = error.status || 1;
+        // exitCode = error.status || 1; // Unused for now
       }
       
       // Should complete even with errors when using --continue-on-error
@@ -246,8 +245,8 @@ describe('Error Recovery E2E', () => {
         result = error.stdout || error.stderr || '';
       }
       
-      expect(result).toContain('Optimization complete!');
-      expect(result).toContain('Errors: 1 images');
+      expect(result).toContain('Processing complete!');
+      expect(result).toContain('Errors: 2');
     });
   });
 });

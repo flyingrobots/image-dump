@@ -50,16 +50,16 @@ describe('Metadata Preservation', () => {
           background: { r: 255, g: 0, b: 0 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'Test Copyright',
-            Artist: 'Test Artist'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'Test Copyright',
+              Artist: 'Test Artist'
+            }
           }
-        }
-      })
-      .toFile(inputPath);
+        })
+        .toFile(inputPath);
       
       // Process with metadata stripping
       const outputPath = path.join(tempDir, 'output.jpg');
@@ -85,16 +85,16 @@ describe('Metadata Preservation', () => {
           background: { r: 0, g: 255, b: 0 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'Test Copyright 2024',
-            Artist: 'Test Photographer'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'Test Copyright 2024',
+              Artist: 'Test Photographer'
+            }
           }
-        }
-      })
-      .toFile(inputPath);
+        })
+        .toFile(inputPath);
       
       // Process with metadata preservation
       const outputPath = path.join(tempDir, 'output.jpg');
@@ -121,15 +121,15 @@ describe('Metadata Preservation', () => {
           background: { r: 0, g: 0, b: 255 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'WebP Test'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'WebP Test'
+            }
           }
-        }
-      })
-      .toFile(inputPath);
+        })
+        .toFile(inputPath);
       
       // Convert to WebP with metadata
       const outputPath = path.join(tempDir, 'output.webp');
@@ -153,15 +153,15 @@ describe('Metadata Preservation', () => {
           background: { r: 255, g: 255, b: 0 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'AVIF Test'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'AVIF Test'
+            }
           }
-        }
-      })
-      .toFile(inputPath);
+        })
+        .toFile(inputPath);
       
       // Convert to AVIF with metadata
       const outputPath = path.join(tempDir, 'output.avif');

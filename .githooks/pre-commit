@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+echo "🔍 Running pre-commit lint check..."
+
+# Run ESLint in Docker
+if ! OPTIMIZE_FLAGS="" docker compose run --rm -T lint; then
+    echo ""
+    echo "❌ Lint check failed!"
+    echo "💡 Run 'make lint-fix' to auto-fix issues"
+    exit 1
+fi
+
+echo "✅ Pre-commit lint check passed!"

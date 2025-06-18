@@ -1,8 +1,9 @@
-const { minimatch } = require('minimatch');
-const path = require('path');
-
 class QualityRulesEngine {
-  constructor(rules = []) {
+  constructor(rules = [], dependencies = {}) {
+    // Inject dependencies with defaults
+    this.minimatch = dependencies.minimatch || require('minimatch').minimatch;
+    this.path = dependencies.path || require('path');
+    
     this.rules = this.sortRulesBySpecificity(rules);
   }
 
@@ -43,7 +44,7 @@ class QualityRulesEngine {
   ruleMatches(rule, imagePath, metadata) {
     // Pattern matching (on basename)
     const patternMatch = !rule.pattern || 
-      minimatch(path.basename(imagePath), rule.pattern, { nocase: true });
+      this.minimatch(this.path.basename(imagePath), rule.pattern, { nocase: true });
     
     // Directory matching (check if path includes directory)
     const directoryMatch = !rule.directory || 
@@ -89,10 +90,18 @@ class QualityRulesEngine {
     const width = metadata.width || 0;
     const height = metadata.height || 0;
     
-    if (rule.minWidth && width < rule.minWidth) return false;
-    if (rule.minHeight && height < rule.minHeight) return false;
-    if (rule.maxWidth && width > rule.maxWidth) return false;
-    if (rule.maxHeight && height > rule.maxHeight) return false;
+    if (rule.minWidth && width < rule.minWidth) {
+      return false;
+    }
+    if (rule.minHeight && height < rule.minHeight) {
+      return false;
+    }
+    if (rule.maxWidth && width > rule.maxWidth) {
+      return false;
+    }
+    if (rule.maxHeight && height > rule.maxHeight) {
+      return false;
+    }
     
     return true;
   }
@@ -133,7 +142,9 @@ class QualityRulesEngine {
     
     // Size rules are least specific
     if (rule.minWidth || rule.minHeight || 
-        rule.maxWidth || rule.maxHeight) score += 1;
+        rule.maxWidth || rule.maxHeight) {
+      score += 1;
+    }
     
     // Bonus points for combining multiple criteria
     const criteriaCount = [
@@ -159,12 +170,24 @@ class QualityRulesEngine {
     
     return matchingRules.map(rule => {
       const parts = [];
-      if (rule.pattern) parts.push(`pattern: ${rule.pattern}`);
-      if (rule.directory) parts.push(`directory: ${rule.directory}`);
-      if (rule.minWidth) parts.push(`minWidth: ${rule.minWidth}`);
-      if (rule.minHeight) parts.push(`minHeight: ${rule.minHeight}`);
-      if (rule.maxWidth) parts.push(`maxWidth: ${rule.maxWidth}`);
-      if (rule.maxHeight) parts.push(`maxHeight: ${rule.maxHeight}`);
+      if (rule.pattern) {
+        parts.push(`pattern: ${rule.pattern}`);
+      }
+      if (rule.directory) {
+        parts.push(`directory: ${rule.directory}`);
+      }
+      if (rule.minWidth) {
+        parts.push(`minWidth: ${rule.minWidth}`);
+      }
+      if (rule.minHeight) {
+        parts.push(`minHeight: ${rule.minHeight}`);
+      }
+      if (rule.maxWidth) {
+        parts.push(`maxWidth: ${rule.maxWidth}`);
+      }
+      if (rule.maxHeight) {
+        parts.push(`maxHeight: ${rule.maxHeight}`);
+      }
       
       return {
         criteria: parts.join(', '),

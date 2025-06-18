@@ -45,16 +45,16 @@ describe('Metadata Preservation E2E', () => {
           background: { r: 255, g: 0, b: 0 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'Test Copyright 2024',
-            Artist: 'Test Photographer'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'Test Copyright 2024',
+              Artist: 'Test Photographer'
+            }
           }
-        }
-      })
-      .toFile(path.join(testDir, 'original', 'test.jpg'));
+        })
+        .toFile(path.join(testDir, 'original', 'test.jpg'));
       
       // Run optimizer with default config
       const { exitCode } = runOptimizer();
@@ -86,16 +86,16 @@ describe('Metadata Preservation E2E', () => {
           background: { r: 0, g: 255, b: 0 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'Preserved Copyright',
-            Artist: 'Preserved Artist'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'Preserved Copyright',
+              Artist: 'Preserved Artist'
+            }
           }
-        }
-      })
-      .toFile(path.join(testDir, 'original', 'test.jpg'));
+        })
+        .toFile(path.join(testDir, 'original', 'test.jpg'));
       
       // Run optimizer
       const { exitCode } = runOptimizer();
@@ -127,15 +127,15 @@ describe('Metadata Preservation E2E', () => {
           background: { r: 0, g: 0, b: 255 }
         }
       })
-      .jpeg()
-      .withMetadata({
-        exif: {
-          IFD0: {
-            Copyright: 'WebP Test'
+        .jpeg()
+        .withMetadata({
+          exif: {
+            IFD0: {
+              Copyright: 'WebP Test'
+            }
           }
-        }
-      })
-      .toFile(path.join(testDir, 'original', 'test.jpg'));
+        })
+        .toFile(path.join(testDir, 'original', 'test.jpg'));
       
       // Run optimizer
       const { exitCode } = runOptimizer();

@@ -90,6 +90,7 @@ config.local.json
 # State files
 .image-optimization-state.json
 .image-optimization-errors.log
+.docker-build-hash
 
 # Performance reports
 .lighthouseci/

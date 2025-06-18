@@ -4,6 +4,27 @@
 echo "🚀 Running tests before push..."
 echo ""
 
+# Check if source or test files have changed since last Docker build
+LAST_BUILD_FILE=".git/hooks/.last-docker-build"
+NEEDS_BUILD=0
+
+# Create checksum of source files
+CURRENT_CHECKSUM=$(find src scripts tests -name "*.js" -o -name "*.json" -o -name "Dockerfile*" | xargs shasum | shasum | cut -d' ' -f1)
+
+if [ -f "$LAST_BUILD_FILE" ]; then
+    LAST_CHECKSUM=$(cat "$LAST_BUILD_FILE")
+    if [ "$CURRENT_CHECKSUM" != "$LAST_CHECKSUM" ]; then
+        NEEDS_BUILD=1
+    fi
+else
+    NEEDS_BUILD=1
+fi
+
+# Export build decision for Makefile
+export DOCKER_BUILD_NEEDED=$NEEDS_BUILD
+export DOCKER_BUILD_CHECKSUM=$CURRENT_CHECKSUM
+export DOCKER_BUILD_CHECKSUM_FILE=$LAST_BUILD_FILE
+
 # Run tests (which includes all CI checks)
 make test
 

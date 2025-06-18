@@ -4,10 +4,14 @@ class FileTimestampChecker {
   }
 
   async shouldProcess(inputPath, outputPaths, forceReprocess) {
-    if (forceReprocess) return true;
+    if (forceReprocess) {
+      return true;
+    }
     
     const inputModTime = await this.getModTime(inputPath);
-    if (!inputModTime) return false;
+    if (!inputModTime) {
+      return false;
+    }
 
     for (const outputPath of outputPaths) {
       const outputModTime = await this.getModTime(outputPath);

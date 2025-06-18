@@ -1,13 +1,15 @@
-const cliProgress = require('cli-progress');
-const colors = require('ansi-colors');
-
 class ProgressManager {
-  constructor(options = {}) {
+  constructor(options = {}, dependencies = {}) {
+    // Inject dependencies with defaults
+    this.cliProgress = dependencies.cliProgress || require('cli-progress');
+    this.colors = dependencies.colors || require('ansi-colors');
+    this.stdout = dependencies.stdout || process.stdout;
+    
     this.total = options.total || 0;
     this.current = 0;
     this.startTime = null;
     this.isQuiet = options.quiet || false;
-    this.isTTY = process.stdout.isTTY;
+    this.isTTY = this.stdout.isTTY;
     this.bar = null;
     this.stats = {
       processed: 0,
@@ -24,7 +26,7 @@ class ProgressManager {
     this.compactMode = options.compact || false;
     
     // Detect terminal width for responsive design
-    this.terminalWidth = process.stdout.columns || 80;
+    this.terminalWidth = this.stdout.columns || 80;
     
     // Use compact mode for narrow terminals
     if (this.terminalWidth < 80) {
@@ -43,7 +45,7 @@ class ProgressManager {
       // Full format with all information
       const parts = [
         'Processing images',
-        colors.cyan('{bar}'),
+        this.colors.cyan('{bar}'),
         '{percentage}%',
         '|',
         '📸 {value}/{total}'
@@ -60,14 +62,14 @@ class ProgressManager {
       parts.push('|', '💾 {filename}');
       
       if (this.stats.errors > 0) {
-        parts.push('|', colors.red('❌ {errors} errors'));
+        parts.push('|', this.colors.red('❌ {errors} errors'));
       }
       
       format = parts.join(' ');
     }
     
     // Create progress bar with custom format
-    const bar = new cliProgress.SingleBar({
+    const bar = new this.cliProgress.SingleBar({
       format,
       barCompleteChar: '▓',
       barIncompleteChar: '░',
@@ -76,7 +78,7 @@ class ProgressManager {
       stopOnComplete: true,
       etaBuffer: 10,
       fps: 10
-    }, cliProgress.Presets.legacy);
+    }, this.cliProgress.Presets.legacy);
     
     return bar;
   }
@@ -112,9 +114,15 @@ class ProgressManager {
     this.current = current;
     
     // Update stats if provided
-    if (tokens.status === 'processed') this.stats.processed++;
-    else if (tokens.status === 'skipped') this.stats.skipped++;
-    else if (tokens.status === 'error') this.stats.errors++;
+    if (tokens.status === 'processed') {
+      this.stats.processed++;
+    }
+    else if (tokens.status === 'skipped') {
+      this.stats.skipped++;
+    }
+    else if (tokens.status === 'error') {
+      this.stats.errors++;
+    }
     
     if (this.bar) {
       // Calculate speed
@@ -160,7 +168,7 @@ class ProgressManager {
       const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
       const speed = elapsed > 0 ? (this.total / elapsed).toFixed(1) : '0';
       
-      this.logger.log(colors.green('✨ Processing complete!'));
+      this.logger.log(this.colors.green('✨ Processing complete!'));
       this.logger.log(`   Total: ${this.total} images in ${elapsed}s (${speed} img/s)`);
       if (this.stats.processed > 0) {
         this.logger.log(`   Processed: ${this.stats.processed}`);
@@ -169,14 +177,14 @@ class ProgressManager {
         this.logger.log(`   Skipped: ${this.stats.skipped}`);
       }
       if (this.stats.errors > 0) {
-        this.logger.log(colors.red(`   Errors: ${this.stats.errors}`));
+        this.logger.log(this.colors.red(`   Errors: ${this.stats.errors}`));
       }
     }
   }
 
   // Handle terminal resize
   handleResize() {
-    const newWidth = process.stdout.columns || 80;
+    const newWidth = this.stdout.columns || 80;
     if (newWidth !== this.terminalWidth) {
       this.terminalWidth = newWidth;
       this.compactMode = newWidth < 80;
@@ -194,8 +202,30 @@ class ProgressManager {
   cleanup() {
     if (this.bar) {
       this.bar.stop();
-      process.stdout.write('\n');
+      this.stdout.write('\n');
     }
+  }
+  
+  // Helper methods for testing
+  getStats() {
+    return this.stats;
+  }
+  
+  getProgress() {
+    return this.total > 0 ? Math.round((this.current / this.total) * 100) : 0;
+  }
+  
+  getSpeed() {
+    const elapsed = (Date.now() - this.startTime) / 1000;
+    return elapsed > 0 ? this.current / elapsed : 0;
+  }
+  
+  isCompactMode() {
+    return this.compactMode;
+  }
+  
+  getTerminalWidth() {
+    return this.terminalWidth;
   }
 }
 

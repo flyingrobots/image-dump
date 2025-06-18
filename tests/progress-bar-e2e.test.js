@@ -35,8 +35,8 @@ describe('Progress Bar E2E', () => {
             background: { r: 255, g: 0, b: 0 }
           }
         })
-        .png()
-        .toBuffer();
+          .png()
+          .toBuffer();
         
         await fs.writeFile(path.join('original', `test${i}.png`), image);
       }
@@ -96,8 +96,8 @@ describe('Progress Bar E2E', () => {
             background: { r: 0, g: 255, b: 0 }
           }
         })
-        .png()
-        .toBuffer();
+          .png()
+          .toBuffer();
         
         await fs.writeFile(path.join('original', `image${i}.png`), image);
       }
@@ -129,8 +129,8 @@ describe('Progress Bar E2E', () => {
             background: { r: 0, g: 0, b: 255 }
           }
         })
-        .png()
-        .toBuffer();
+          .png()
+          .toBuffer();
         
         await fs.writeFile(path.join('original', `pic${i}.png`), image);
       }
@@ -197,9 +197,9 @@ describe('Progress Bar E2E', () => {
             }
           }
         })
-        .png()
-        .toBuffer()
-        .then(buffer => fs.writeFile(path.join('original', `perf${i}.png`), buffer));
+          .png()
+          .toBuffer()
+          .then(buffer => fs.writeFile(path.join('original', `perf${i}.png`), buffer));
         
         imagePromises.push(promise);
       }

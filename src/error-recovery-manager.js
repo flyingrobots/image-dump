@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
-const path = require('path');
+const StatePersistenceManager = require('./state-persistence-manager');
+const ErrorLogger = require('./error-logger');
 
 class ErrorRecoveryManager {
   constructor(options = {}) {
@@ -7,11 +7,19 @@ class ErrorRecoveryManager {
     this.maxRetries = options.maxRetries || 3;
     this.retryDelay = options.retryDelay || 1000;
     this.exponentialBackoff = options.exponentialBackoff !== false;
-    this.stateFile = options.stateFile || '.image-optimization-state.json';
-    this.errorLog = options.errorLog || 'image-optimization-errors.log';
-    this.errors = [];
     this.processedFiles = new Map();
     this.logger = options.logger || console;
+    
+    // Delegate state persistence and error logging
+    this.statePersistence = new StatePersistenceManager({
+      stateFile: options.stateFile,
+      logger: this.logger
+    });
+    
+    this.errorLogger = new ErrorLogger({
+      errorLog: options.errorLog,
+      logger: this.logger
+    });
   }
 
   async processWithRecovery(operation, context) {
@@ -31,7 +39,7 @@ class ErrorRecoveryManager {
         
         if (!isRetryable || attempt === this.maxRetries) {
           // Log the error
-          await this.logError(context.file, error, { ...context, attempt });
+          await this.errorLogger.log(context.file, error, { ...context, attempt });
           
           if (this.continueOnError) {
             return { success: false, error, attempts: attempt };
@@ -53,101 +61,51 @@ class ErrorRecoveryManager {
     return { success: false, error: lastError, attempts: this.maxRetries };
   }
 
-  async logError(file, error, context) {
-    const errorEntry = {
-      timestamp: new Date().toISOString(),
-      file,
-      error: {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      },
-      context: {
-        ...context,
-        retryCount: context.attempt || 0
-      }
-    };
-    
-    this.errors.push(errorEntry);
-    
-    // Append to error log file
-    try {
-      const logLine = JSON.stringify(errorEntry) + '\n';
-      await fs.appendFile(this.errorLog, logLine);
-    } catch (logError) {
-      this.logger.error('Failed to write to error log:', logError.message);
-    }
-  }
-
   async saveState(state) {
-    const stateData = {
-      version: '1.0',
-      startedAt: state.startedAt || new Date().toISOString(),
-      lastUpdatedAt: new Date().toISOString(),
-      configuration: state.configuration || {},
+    const processedArray = Array.from(this.processedFiles.entries()).map(([path, data]) => ({
+      path,
+      ...data
+    }));
+    
+    const stateToSave = {
+      ...state,
       progress: {
         total: state.total || 0,
         processed: this.processedFiles.size,
-        succeeded: Array.from(this.processedFiles.values()).filter(f => f.status === 'success').length,
-        failed: Array.from(this.processedFiles.values()).filter(f => f.status === 'failed').length,
+        succeeded: processedArray.filter(f => f.status === 'success').length,
+        failed: processedArray.filter(f => f.status === 'failed').length,
         remaining: state.total - this.processedFiles.size
       },
       files: {
-        processed: Array.from(this.processedFiles.entries()).map(([path, data]) => ({
-          path,
-          ...data
-        })),
+        processed: processedArray,
         pending: state.pending || []
       }
     };
-
-    try {
-      await fs.writeFile(this.stateFile, JSON.stringify(stateData, null, 2));
-    } catch (error) {
-      this.logger.error('Failed to save state:', error.message);
-    }
+    
+    await this.statePersistence.save(stateToSave);
   }
 
   async loadState() {
-    try {
-      const stateData = await fs.readFile(this.stateFile, 'utf8');
-      const state = JSON.parse(stateData);
-      
-      // Validate state version
-      if (state.version !== '1.0') {
-        this.logger.warn('State file version mismatch, ignoring saved state');
-        return null;
-      }
-      
+    const state = await this.statePersistence.load();
+    
+    if (state && state.files && state.files.processed) {
       // Restore processed files
-      if (state.files && state.files.processed) {
-        state.files.processed.forEach(file => {
-          this.processedFiles.set(file.path, {
-            status: file.status,
-            error: file.error,
-            outputs: file.outputs
-          });
+      state.files.processed.forEach(file => {
+        this.processedFiles.set(file.path, {
+          status: file.status,
+          error: file.error,
+          outputs: file.outputs
         });
-      }
-      
-      return state;
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return null; // No state file exists
-      }
-      this.logger.error('Failed to load state:', error.message);
-      return null;
+      });
     }
+    
+    return state;
   }
 
   async clearState() {
-    try {
-      await fs.unlink(this.stateFile);
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        this.logger.error('Failed to clear state:', error.message);
-      }
-    }
+    await this.statePersistence.clear();
+    await this.errorLogger.clear();
+    this.processedFiles.clear();
   }
 
   recordProcessedFile(filePath, result) {
@@ -159,8 +117,9 @@ class ErrorRecoveryManager {
   }
 
   generateReport() {
-    const succeeded = Array.from(this.processedFiles.values()).filter(f => f.status === 'success').length;
-    const failed = Array.from(this.processedFiles.values()).filter(f => f.status === 'failed').length;
+    const processedArray = Array.from(this.processedFiles.values());
+    const succeeded = processedArray.filter(f => f.status === 'success').length;
+    const failed = processedArray.filter(f => f.status === 'failed').length;
     
     return {
       summary: {
@@ -169,9 +128,27 @@ class ErrorRecoveryManager {
         failed,
         successRate: this.processedFiles.size > 0 ? (succeeded / this.processedFiles.size * 100).toFixed(1) + '%' : '0%'
       },
-      errors: this.errors,
-      errorLogPath: this.errorLog
+      errors: this.errorLogger.getErrors(),
+      errorCount: this.errorLogger.getErrorCount(),
+      errorLogPath: this.errorLogger.errorLog
     };
+  }
+
+  // Delegate methods for backward compatibility with tests
+  logError(file, error, context) {
+    return this.errorLogger.log(file, error, context);
+  }
+
+  get errors() {
+    return this.errorLogger.getErrors();
+  }
+
+  get errorLog() {
+    return this.errorLogger.errorLog;
+  }
+
+  get stateFile() {
+    return this.statePersistence.stateFile;
   }
 
   sleep(ms) {

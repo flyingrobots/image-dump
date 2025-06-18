@@ -23,8 +23,8 @@ describe('Configuration End-to-End', () => {
         background: { r: 100, g: 150, b: 200 }
       }
     })
-    .png()
-    .toFile(path.join(testDir, 'original', 'test-image.png'));
+      .png()
+      .toFile(path.join(testDir, 'original', 'test-image.png'));
   });
   
   afterEach(async () => {
@@ -180,8 +180,8 @@ describe('Configuration End-to-End', () => {
           background: { r: 100, g: 150, b: 200 }
         }
       })
-      .png()
-      .toFile(path.join(testDir, 'original', 'test-image.png'));
+        .png()
+        .toFile(path.join(testDir, 'original', 'test-image.png'));
       
       const { exitCode } = runOptimizer();
       

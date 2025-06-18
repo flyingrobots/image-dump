@@ -1,8 +1,9 @@
-const fs = require('fs').promises;
-const path = require('path');
-
 class ConfigLoader {
-  constructor() {
+  constructor(dependencies = {}) {
+    // Inject dependencies with defaults
+    this.fs = dependencies.fs || require('fs').promises;
+    this.path = dependencies.path || require('path');
+    
     this.defaultConfig = {
       formats: ['webp', 'avif', 'original'],
       quality: {
@@ -26,7 +27,7 @@ class ConfigLoader {
     const configPath = await this.findConfigFile(projectRoot);
     if (configPath) {
       try {
-        const configContent = await fs.readFile(configPath, 'utf8');
+        const configContent = await this.fs.readFile(configPath, 'utf8');
         try {
           fileConfig = JSON.parse(configContent);
         } catch (parseError) {
@@ -54,9 +55,9 @@ class ConfigLoader {
     const configNames = ['.imagerc', '.imagerc.json'];
     
     for (const configName of configNames) {
-      const configPath = path.join(projectRoot, configName);
+      const configPath = this.path.join(projectRoot, configName);
       try {
-        const stats = await fs.stat(configPath);
+        const stats = await this.fs.stat(configPath);
         if (stats.isFile()) {
           return configPath;
         }

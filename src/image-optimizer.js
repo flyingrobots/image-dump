@@ -11,6 +11,7 @@ class ImageOptimizer {
       this.timestampChecker = config.timestampChecker;
       this.imageProcessor = config.imageProcessor;
       this.pathGenerator = config.pathGenerator;
+      this.processingConfigGenerator = config.processingConfigGenerator;
       this.fileOperations = config.fileOperations;
       this.logger = config.logger;
     } else {
@@ -21,6 +22,7 @@ class ImageOptimizer {
         timestampChecker,
         imageProcessor,
         pathGenerator,
+        processingConfigGenerator,
         fileOperations,
         logger
       } = config;
@@ -30,6 +32,7 @@ class ImageOptimizer {
       this.timestampChecker = timestampChecker;
       this.imageProcessor = imageProcessor;
       this.pathGenerator = pathGenerator;
+      this.processingConfigGenerator = processingConfigGenerator;
       this.fileOperations = fileOperations;
       this.logger = logger;
       
@@ -102,42 +105,18 @@ class ImageOptimizer {
         return 'processed';
       }
 
-      if (ext === '.webp') {
-        // For WebP input, only create webp and thumbnail based on config
-        const configs = [];
-        
-        if (this.config.formats.includes('webp') || this.config.formats.includes('original')) {
-          configs.push({
-            outputPath: path.join(this.config.outputDir, filename),
-            format: 'webp',
-            options: { quality: this.config.quality.webp },
-            resize: { width: 2000, height: 2000 }
-          });
-        }
-        
-        if (this.config.generateThumbnails) {
-          configs.push({
-            outputPath: path.join(this.config.outputDir, `${path.parse(filename).name}-thumb.webp`),
-            format: 'webp',
-            options: { quality: this.config.quality.webp },
-            resize: { width: this.config.thumbnailWidth, height: this.config.thumbnailWidth }
-          });
-        }
-        
-        if (configs.length > 0) {
-          const results = await this.imageProcessor.processImage(inputPath, configs);
-          const failed = results.filter(r => !r.success);
-          if (failed.length > 0) {
-            throw new Error(`Failed to process ${filename}: ${failed[0].error}`);
-          }
-          this.logger.log(`✅ Optimized ${filename}`);
-        }
-        return 'processed';
-      }
 
-      // Process based on configured formats
-      const configs = this.getProcessingConfigs(filename, inputPath);
+      // Generate output paths and processing configs
+      const paths = this.pathGenerator.generatePaths(filename);
+      const configs = this.processingConfigGenerator ? 
+        this.processingConfigGenerator.generate(filename, paths, this.config) :
+        this.getProcessingConfigs(filename, inputPath);
+      
       if (configs.length > 0) {
+        // Ensure output directory exists
+        const outputDir = path.dirname(configs[0].outputPath);
+        await fs.mkdir(outputDir, { recursive: true });
+        
         const results = await this.imageProcessor.processImage(inputPath, configs);
         const failed = results.filter(r => !r.success);
         if (failed.length > 0) {
@@ -187,13 +166,14 @@ class ImageOptimizer {
     return paths;
   }
   
-  getProcessingConfigs(filename, inputPath) {
+  getProcessingConfigs(filename, _inputPath) {
     const name = path.parse(filename).name;
     const ext = path.parse(filename).ext.toLowerCase();
     const configs = [];
     
     // Add format-specific configs based on configuration
-    if (this.config.formats.includes('webp')) {
+    // Skip WebP-to-WebP conversion (input WebP should only generate other formats)
+    if (this.config.formats.includes('webp') && ext !== '.webp') {
       configs.push({
         outputPath: path.join(this.config.outputDir, `${name}.webp`),
         format: 'webp',

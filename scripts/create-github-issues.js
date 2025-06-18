@@ -71,13 +71,15 @@ async function parseFeatureSpec(filePath) {
     let overview = '';
     if (overviewIndex !== -1) {
       for (let i = overviewIndex + 1; i < lines.length; i++) {
-        if (lines[i].startsWith('##')) break;
+        if (lines[i].startsWith('##')) {
+          break;
+        }
         overview += lines[i] + '\n';
       }
     }
     
     return { title, overview: overview.trim() };
-  } catch (error) {
+  } catch {
     return null;
   }
 }

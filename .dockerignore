@@ -1,37 +1,51 @@
-# Git
-.git
+# Node modules should be installed fresh in container
+node_modules/
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Git files (except .git which we need for LFS)
 .gitignore
-.gitattributes
+.github/
 
-# Node
-node_modules
-npm-debug.log
+# Docker files themselves
+Dockerfile*
+docker-compose.yml
+.dockerignore
 
-# Testing
-coverage
-.nyc_output
-tests
+# Environment files
+.env
+.env.*
 
-# IDE
-.vscode
-.idea
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Images (we'll mount these as volumes)
-original
-optimized
+# Build artifacts
+dist/
+build/
+
+# Image directories (these are mounted as volumes)
+original/
+optimized/
 
 # Documentation
-README.md
 *.md
+docs/
 
-# GitHub
-.github
+# Temporary files
+*.tmp
+*.temp
+*.log
 
-# Docker
-Dockerfile*
-docker compose.yml
-.dockerignore
+# Lock files should be copied
+# !package-lock.json

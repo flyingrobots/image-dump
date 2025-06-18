@@ -9,8 +9,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies including dev
-RUN npm ci
+# Install all dependencies including dev with cache mount
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Copy jest config
 COPY jest.config.js ./
@@ -22,4 +23,4 @@ COPY src ./src
 # Tests will be mounted as a volume
 
 # Run tests by default
-CMD ["npm", "run", "test:jest"]
+CMD ["npm", "run", "_docker:test"]

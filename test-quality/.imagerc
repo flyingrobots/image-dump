@@ -5,7 +5,8 @@
       "quality": {
         "png": 50,
         "webp": 40,
-        "avif": 30
+        "avif": 30,
+        "jpg": 60
       }
     }
   ],
