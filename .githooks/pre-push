@@ -24,6 +24,7 @@ fi
 export DOCKER_BUILD_NEEDED=$NEEDS_BUILD
 export DOCKER_BUILD_CHECKSUM=$CURRENT_CHECKSUM
 export DOCKER_BUILD_CHECKSUM_FILE=$LAST_BUILD_FILE
+export OPTIMIZE_FLAGS=""
 
 # Run tests (which includes all CI checks)
 make test
