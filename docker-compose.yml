@@ -3,7 +3,8 @@ services:
   lint:
     build:
       context: .
-      dockerfile: Dockerfile.lint
+      dockerfile: Dockerfile
+      target: development
     volumes:
       - ./scripts:/app/scripts${LINT_MOUNT_MODE:-:ro}
       - ./src:/app/src${LINT_MOUNT_MODE:-:ro}
@@ -17,6 +18,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: production
     volumes:
       - ./original:/app/original:ro
       - ./optimized:/app/optimized
@@ -33,7 +35,8 @@ services:
   test:
     build:
       context: .
-      dockerfile: Dockerfile.test
+      dockerfile: Dockerfile
+      target: development
     volumes:
       - ./scripts:/app/scripts${TEST_MOUNT_MODE:-:ro}
       - ./src:/app/src${TEST_MOUNT_MODE:-:ro}

@@ -5,10 +5,10 @@
   "scripts": {
     "setup": "bash scripts/setup.sh",
     "test": "bash scripts/test.sh",
-    "test:coverage": "docker compose run --rm test-coverage",
+    "test:coverage": "docker compose run --rm -T test-coverage",
     "test:watch": "docker compose run --rm test-watch",
-    "lint": "docker compose run --rm lint",
-    "lint:fix": "docker compose run --rm -e LINT_COMMAND=_docker:lint:fix lint",
+    "lint": "docker compose run --rm -T lint",
+    "lint:fix": "docker compose run --rm -T -e LINT_COMMAND=_docker:lint:fix lint",
     "optimize": "docker compose run --rm optimize",
     "optimize:force": "docker compose run --rm optimize-force",
     "optimize:lfs": "docker compose run --rm optimize-lfs",

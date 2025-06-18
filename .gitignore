@@ -56,6 +56,8 @@ screenshots/
 original/test-*.png
 original/test-*.jpg
 optimized/test-*
+test-tmp/
+test-quality/
 
 # Backup files
 *.bak

@@ -5,7 +5,7 @@ echo "🔍 Running CI checks..."
 echo ""
 
 echo "1️⃣ Running ESLint..."
-docker compose run --rm lint || (echo "❌ Lint failed!" && exit 1)
+docker compose run --rm -T lint || (echo "❌ Lint failed!" && exit 1)
 echo ""
 
 # Build only if needed (when called from pre-push hook)
@@ -24,7 +24,7 @@ fi
 
 echo ""
 echo "2️⃣ Running tests with coverage..."
-docker compose run --rm test-coverage
+docker compose run --rm -T test-coverage
 
 echo ""
 echo "3️⃣ Building all Docker services..."

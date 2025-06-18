@@ -27,7 +27,7 @@ export DOCKER_BUILD_CHECKSUM_FILE=$LAST_BUILD_FILE
 export OPTIMIZE_FLAGS=""
 
 # Run tests (which includes all CI checks)
-make test
+npm test
 
 if [ $? -ne 0 ]; then
     echo ""
