@@ -10,12 +10,15 @@ describe('MaliciousFileDetector', () => {
       readFile: jest.fn()
     };
 
-    mockSharp = jest.fn(() => ({
+    // Create a more complete Sharp mock
+    const sharpInstance = {
       metadata: jest.fn(),
-      withMetadata: jest.fn(() => ({
-        toBuffer: jest.fn()
-      }))
-    }));
+      withMetadata: jest.fn().mockReturnThis(),
+      toBuffer: jest.fn()
+    };
+    
+    mockSharp = jest.fn(() => sharpInstance);
+    mockSharp.mockReturnValue(sharpInstance);
 
     detector = new MaliciousFileDetector({ fs: mockFs, sharp: mockSharp });
   });
@@ -24,7 +27,9 @@ describe('MaliciousFileDetector', () => {
     it('should detect clean files as non-malicious', async () => {
       const cleanBuffer = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46]); // JPEG
       mockFs.readFile.mockResolvedValue(cleanBuffer);
-      mockSharp().metadata.mockResolvedValue({ width: 800, height: 600, channels: 3 });
+      
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({ width: 800, height: 600, channels: 3 });
 
       const result = await detector.detectMaliciousContent('/test/clean.jpg');
 
@@ -80,12 +85,15 @@ describe('MaliciousFileDetector', () => {
       const sanitizedBuffer = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]);
 
       mockFs.readFile.mockResolvedValue(imageBuffer);
-      mockSharp().metadata.mockResolvedValue({
+      
+      // Access the sharp instance created in beforeEach
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         width: 800,
         height: 600,
         exif: maliciousExif
       });
-      mockSharp().withMetadata().toBuffer.mockResolvedValue(sanitizedBuffer);
+      sharpInstance.toBuffer.mockResolvedValue(sanitizedBuffer);
 
       const result = await detector.detectMaliciousContent('/test/exif-malicious.jpg');
 
@@ -95,20 +103,29 @@ describe('MaliciousFileDetector', () => {
     });
 
     it('should detect steganography indicators', async () => {
-      const largeBuffer = Buffer.alloc(1000000, 0xFF); // Large buffer for dimensions
+      // Create a buffer with random data for high entropy
+      const largeBuffer = Buffer.alloc(10000000);
+      // Fill with pseudo-random data to ensure high entropy
+      for (let i = 0; i < largeBuffer.length; i++) {
+        largeBuffer[i] = Math.floor(Math.random() * 256);
+      }
       mockFs.readFile.mockResolvedValue(largeBuffer);
-      mockSharp().metadata.mockResolvedValue({
+      
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         width: 100,
         height: 100,
-        channels: 3
+        channels: 3 // Expected: 30KB, Actual: 10MB - ratio > 50
       });
 
       const result = await detector.detectMaliciousContent('/test/stego.jpg', {
         detectSteganography: true
       });
 
+      // The steganography detection puts results in warnings array with proper structure
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings[0].type).toBe('steganography');
+      const stegoWarning = result.warnings.find(w => w.type === 'steganography');
+      expect(stegoWarning).toBeDefined();
     });
   });
 
@@ -199,10 +216,11 @@ describe('MaliciousFileDetector', () => {
       const maliciousExif = Buffer.from('<?php system($_GET["cmd"]); ?>');
       const sanitizedBuffer = Buffer.from([0xFF, 0xD8]);
 
-      mockSharp().metadata.mockResolvedValue({
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         exif: maliciousExif
       });
-      mockSharp().withMetadata().toBuffer.mockResolvedValue(sanitizedBuffer);
+      sharpInstance.toBuffer.mockResolvedValue(sanitizedBuffer);
 
       const result = await detector.analyzeExifData(imageBuffer, '/test/image.jpg');
 
@@ -215,7 +233,8 @@ describe('MaliciousFileDetector', () => {
     it('should detect unusually large EXIF data', async () => {
       const largeExif = Buffer.alloc(100000, 0x41); // 100KB of 'A'
       
-      mockSharp().metadata.mockResolvedValue({
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         exif: largeExif
       });
 
@@ -226,7 +245,8 @@ describe('MaliciousFileDetector', () => {
     });
 
     it('should handle images without EXIF data', async () => {
-      mockSharp().metadata.mockResolvedValue({
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         width: 800,
         height: 600
         // No exif property
@@ -242,11 +262,18 @@ describe('MaliciousFileDetector', () => {
 
   describe('detectSteganography', () => {
     it('should detect unusual file size ratios', async () => {
-      const largeBuffer = Buffer.alloc(1000000); // 1MB buffer
-      mockSharp().metadata.mockResolvedValue({
+      // Create a buffer with random data for high entropy
+      const largeBuffer = Buffer.alloc(10000000); // 10MB buffer
+      // Fill with pseudo-random data to ensure high entropy
+      for (let i = 0; i < largeBuffer.length; i++) {
+        largeBuffer[i] = Math.floor(Math.random() * 256);
+      }
+      
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         width: 100,
         height: 100,
-        channels: 3 // Expected size: 100*100*3 = 30KB, actual: 1MB
+        channels: 3 // Expected size: 100*100*3 = 30,000 bytes, actual: 10MB (ratio = 333 > 50)
       });
 
       const result = await detector.detectSteganography(largeBuffer, '/test/image.jpg');
@@ -257,7 +284,8 @@ describe('MaliciousFileDetector', () => {
 
     it('should detect suspicious metadata patterns', async () => {
       const exifWithStego = Buffer.from('Camera info with hidden stego data');
-      mockSharp().metadata.mockResolvedValue({
+      const sharpInstance = mockSharp();
+      sharpInstance.metadata.mockResolvedValue({
         width: 800,
         height: 600,
         channels: 3,

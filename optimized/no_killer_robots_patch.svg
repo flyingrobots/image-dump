@@ -1,0 +1,67 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="150" cy="150" r="115" fill="#203C56
+"/>
+
+  <!-- Outer border ring -->
+  <circle cx="150" cy="150" r="115" fill="none" stroke="#4592C9
+
+" stroke-width="20"/>
+
+  <!-- Inner circle for peace symbol -->
+  <circle cx="150" cy="150" r="70" fill="#203C56
+"/>
+
+  <!-- Peace symbol -->
+  <g fill="#4592C9">
+  <!-- Vertical line -->
+  <rect x="144" y="80" width="12" height="140"/>
+  
+  <!-- Left diagonal line -->
+  <rect x="144" y="150" width="12" height="70" transform="rotate(-45 150 150)"/>
+  
+  <!-- Right diagonal line -->
+  <rect x="144" y="150" width="12" height="70" transform="rotate(45 150 150)"/>
+</g>
+
+  <!-- Text around the circle -->
+  <defs>
+    <path id="circle-path" 
+      d="M 150,150 
+         m -80,0 
+         a 80,80 0 1,1 160,0 
+         a 80,80 0 1,1 -160,0"/>
+  </defs>
+
+  <style>
+    .spin {
+      animation: spin 20s linear infinite;
+      transform-origin: 150px 150px;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
+  <style>
+    .spin {
+      animation: spin 20s linear infinite;
+      transform-origin: 150px 150px;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
+
+  <text font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#4592C9
+" class="spin">
+    <textPath 
+      href="#circle-path"
+      startOffset="0%"
+      textLength="495"
+      lengthAdjust="spacing">
+      NO KILLER ROBOTS • NO WEAPONS • NO EVIL AI •
+    </textPath>
+  </text>
+</svg>

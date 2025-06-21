@@ -11,9 +11,13 @@ describe('ImageValidator', () => {
       readFile: jest.fn()
     };
 
-    mockSharp = jest.fn(() => ({
+    // Create a Sharp instance mock
+    const sharpInstance = {
       metadata: jest.fn()
-    }));
+    };
+    
+    // Mock Sharp to return the instance when called with any argument
+    mockSharp = jest.fn(() => sharpInstance);
 
     validator = new ImageValidator({ fs: mockFs, sharp: mockSharp });
   });

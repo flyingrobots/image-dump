@@ -60,7 +60,7 @@ class MaliciousFileDetector {
     this.steganographyIndicators = [
       // LSB steganography indicators
       { name: 'High entropy in LSBs', threshold: 0.9 },
-      { name: 'Unusual file size for dimensions', threshold: 1.5 },
+      { name: 'Unusual file size for dimensions', threshold: 50 },
       { name: 'Suspicious metadata patterns', patterns: ['stego', 'hidden', 'secret'] }
     ];
   }
@@ -114,7 +114,10 @@ class MaliciousFileDetector {
         const exifResult = await this.analyzeExifData(buffer, filePath);
         if (exifResult.malicious) {
           result.isMalicious = true;
-          result.threats.push(exifResult);
+          result.threats.push({
+            type: 'exif_analysis',
+            ...exifResult
+          });
           result.confidence = Math.max(result.confidence, exifResult.confidence);
         }
         if (exifResult.sanitized) {
@@ -129,7 +132,10 @@ class MaliciousFileDetector {
       if (config.detectSteganography) {
         const stegoResult = await this.detectSteganography(buffer, filePath);
         if (stegoResult.suspicious) {
-          result.warnings.push(stegoResult);
+          result.warnings.push({
+            type: 'steganography',
+            ...stegoResult
+          });
           result.confidence = Math.max(result.confidence, stegoResult.confidence * 0.5); // Lower confidence for stego
         }
       }

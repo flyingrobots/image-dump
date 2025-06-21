@@ -38,7 +38,7 @@ class ResourceLimiter {
     };
 
     // Check if we can start new process
-    await this.checkConcurrencyLimits();
+    this.checkConcurrencyLimits();
     
     // Check system resources
     await this.checkSystemResources();
@@ -46,34 +46,54 @@ class ResourceLimiter {
     const processId = this.generateProcessId();
     this.activeProcesses.add(processId);
     
-    let timeoutId;
     let memoryInterval;
     const startTime = Date.now();
     let peakMemory = 0;
+    let memoryCheckFailed = false;
+    let memoryError;
     
     try {
-      // Set up CPU time limit
-      if (config.maxCpuTime > 0) {
-        timeoutId = setTimeout(() => {
-          throw new Error(`CPU time limit exceeded: ${config.maxCpuTime}ms`);
-        }, config.maxCpuTime);
-      }
-      
       // Set up memory monitoring
       if (config.maxMemory > 0) {
         memoryInterval = setInterval(() => {
-          const memUsage = this.process.memoryUsage();
-          const currentMemory = memUsage.heapUsed + memUsage.external;
-          peakMemory = Math.max(peakMemory, currentMemory);
-          
-          if (currentMemory > config.maxMemory) {
-            throw new Error(`Memory limit exceeded: ${currentMemory} > ${config.maxMemory}`);
+          try {
+            const memUsage = this.process.memoryUsage();
+            const currentMemory = memUsage.heapUsed + memUsage.external;
+            peakMemory = Math.max(peakMemory, currentMemory);
+            
+            if (currentMemory > config.maxMemory) {
+              memoryCheckFailed = true;
+              memoryError = new Error(`Memory limit exceeded: ${currentMemory} > ${config.maxMemory}`);
+              clearInterval(memoryInterval);
+            }
+          } catch (error) {
+            memoryCheckFailed = true;
+            memoryError = error;
+            clearInterval(memoryInterval);
           }
         }, 100); // Check every 100ms
       }
       
-      // Execute the operation
-      const result = await operation();
+      // Execute operation with timeout using Promise.race
+      const operationPromise = operation();
+      
+      let result;
+      if (config.maxCpuTime > 0) {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`CPU time limit exceeded: ${config.maxCpuTime}ms`));
+          }, config.maxCpuTime);
+        });
+        
+        result = await Promise.race([operationPromise, timeoutPromise]);
+      } else {
+        result = await operationPromise;
+      }
+      
+      // Check if memory limit was exceeded during operation
+      if (memoryCheckFailed) {
+        throw memoryError;
+      }
       
       // Record performance metrics
       const executionTime = Date.now() - startTime;
@@ -98,9 +118,6 @@ class ResourceLimiter {
       
     } finally {
       // Clean up
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
       if (memoryInterval) {
         clearInterval(memoryInterval);
       }
@@ -198,7 +215,7 @@ class ResourceLimiter {
   }
 
   generateProcessId() {
-    return `proc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `proc_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   getResourceUsage() {

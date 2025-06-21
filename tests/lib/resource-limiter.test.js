@@ -58,19 +58,19 @@ describe('ResourceLimiter', () => {
 
     it('should enforce CPU time limits', async () => {
       const operation = jest.fn().mockImplementation(() => {
-        return new Promise(resolve => setTimeout(resolve, 6000)); // 6 seconds
+        return new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds
       });
 
       await expect(limiter.withResourceLimits(operation, { maxCpuTime: 1000 }))
         .rejects.toThrow('CPU time limit exceeded: 1000ms');
-    });
+    }, 10000); // 10 second timeout for test
 
     it('should enforce memory limits', async () => {
       let memoryCallCount = 0;
       mockProcess.memoryUsage.mockImplementation(() => {
         memoryCallCount++;
         const baseMemory = 30 * 1024 * 1024;
-        const excessMemory = memoryCallCount > 2 ? 200 * 1024 * 1024 : 0; // Exceed after 2 calls
+        const excessMemory = memoryCallCount > 3 ? 200 * 1024 * 1024 : 0; // Exceed after 3 calls
         
         return {
           rss: 50 * 1024 * 1024,
@@ -81,7 +81,7 @@ describe('ResourceLimiter', () => {
       });
 
       const operation = jest.fn().mockImplementation(() => {
-        return new Promise(resolve => setTimeout(resolve, 200)); // 200ms
+        return new Promise(resolve => setTimeout(resolve, 500)); // 500ms to allow memory checks
       });
 
       await expect(limiter.withResourceLimits(operation, { maxMemory: 100 * 1024 * 1024 }))
@@ -90,12 +90,15 @@ describe('ResourceLimiter', () => {
 
     it('should enforce concurrency limits', async () => {
       const operation = jest.fn().mockImplementation(() => {
-        return new Promise(resolve => setTimeout(resolve, 100));
+        return new Promise(resolve => setTimeout(resolve, 200)); // Longer delay
       });
 
       // Start 2 operations (at the limit)
       const promise1 = limiter.withResourceLimits(operation);
       const promise2 = limiter.withResourceLimits(operation);
+
+      // Wait a bit for operations to start
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Third operation should be rejected
       await expect(limiter.withResourceLimits(operation))

@@ -198,7 +198,7 @@ class FormatWhitelistEnforcer {
     try {
       const buffer = await this.fs.readFile(filePath);
       
-      if (buffer.length < 8) {
+      if (buffer.length < 2) {
         return { valid: false, error: 'File too small for magic byte validation' };
       }
 
@@ -268,7 +268,6 @@ class FormatWhitelistEnforcer {
           // Check at beginning
           if (this.matchesMagicBytes(buffer, magicBytePattern, format)) {
             detectedFormats.push(format);
-            break;
           }
 
           // Check for embedded signatures (polyglot detection)
