@@ -14,7 +14,41 @@ class ConfigLoader {
       outputDir: 'optimized',
       generateThumbnails: true,
       thumbnailWidth: 200,
-      preserveMetadata: false
+      preserveMetadata: false,
+      security: {
+        enforceValidation: true,
+        enforceResourceLimits: true,
+        enforceFormatWhitelist: true,
+        detectMaliciousContent: true,
+        sanitizeFiles: true,
+        blockOnThreat: true,
+        logSecurityEvents: true,
+        validation: {
+          maxFileSize: 50 * 1024 * 1024, // 50MB
+          maxWidth: 10000,
+          maxHeight: 10000,
+          minWidth: 1,
+          minHeight: 1
+        },
+        resourceLimits: {
+          maxMemoryPerImage: 512 * 1024 * 1024, // 512MB
+          maxCpuTimePerImage: 60000, // 60 seconds
+          maxConcurrentProcesses: 4
+        },
+        formatWhitelist: {
+          allowedFormats: ['jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tiff'],
+          strictValidation: true,
+          polyglotDetection: true,
+          deepValidation: true
+        },
+        maliciousDetection: {
+          checkZipBombs: true,
+          checkSvgScripts: true,
+          sanitizeExif: true,
+          detectSteganography: false,
+          checkKnownExploits: true
+        }
+      }
     };
     
     this.validFormats = ['webp', 'avif', 'original', 'jpeg', 'png'];
@@ -187,6 +221,121 @@ class ConfigLoader {
           }
         }
       });
+    }
+    
+    // Validate security configuration
+    if (config.security !== undefined) {
+      this.validateSecurityConfig(config.security);
+    }
+  }
+  
+  validateSecurityConfig(security) {
+    if (typeof security !== 'object' || security === null) {
+      throw new Error('security must be an object');
+    }
+    
+    // Validate boolean flags
+    const booleanFlags = [
+      'enforceValidation', 'enforceResourceLimits', 'enforceFormatWhitelist',
+      'detectMaliciousContent', 'sanitizeFiles', 'blockOnThreat', 'logSecurityEvents'
+    ];
+    
+    for (const flag of booleanFlags) {
+      if (security[flag] !== undefined && typeof security[flag] !== 'boolean') {
+        throw new Error(`security.${flag} must be a boolean`);
+      }
+    }
+    
+    // Validate validation settings
+    if (security.validation !== undefined) {
+      this.validateValidationSettings(security.validation);
+    }
+    
+    // Validate resource limits
+    if (security.resourceLimits !== undefined) {
+      this.validateResourceLimits(security.resourceLimits);
+    }
+    
+    // Validate format whitelist
+    if (security.formatWhitelist !== undefined) {
+      this.validateFormatWhitelist(security.formatWhitelist);
+    }
+    
+    // Validate malicious detection settings
+    if (security.maliciousDetection !== undefined) {
+      this.validateMaliciousDetectionSettings(security.maliciousDetection);
+    }
+  }
+  
+  validateValidationSettings(validation) {
+    if (typeof validation !== 'object' || validation === null) {
+      throw new Error('security.validation must be an object');
+    }
+    
+    const numericFields = ['maxFileSize', 'maxWidth', 'maxHeight', 'minWidth', 'minHeight'];
+    for (const field of numericFields) {
+      if (validation[field] !== undefined) {
+        if (typeof validation[field] !== 'number' || validation[field] <= 0) {
+          throw new Error(`security.validation.${field} must be a positive number`);
+        }
+      }
+    }
+  }
+  
+  validateResourceLimits(resourceLimits) {
+    if (typeof resourceLimits !== 'object' || resourceLimits === null) {
+      throw new Error('security.resourceLimits must be an object');
+    }
+    
+    const numericFields = ['maxMemoryPerImage', 'maxCpuTimePerImage', 'maxConcurrentProcesses'];
+    for (const field of numericFields) {
+      if (resourceLimits[field] !== undefined) {
+        if (typeof resourceLimits[field] !== 'number' || resourceLimits[field] <= 0) {
+          throw new Error(`security.resourceLimits.${field} must be a positive number`);
+        }
+      }
+    }
+  }
+  
+  validateFormatWhitelist(formatWhitelist) {
+    if (typeof formatWhitelist !== 'object' || formatWhitelist === null) {
+      throw new Error('security.formatWhitelist must be an object');
+    }
+    
+    if (formatWhitelist.allowedFormats !== undefined) {
+      if (!Array.isArray(formatWhitelist.allowedFormats)) {
+        throw new Error('security.formatWhitelist.allowedFormats must be an array');
+      }
+      
+      for (const format of formatWhitelist.allowedFormats) {
+        if (typeof format !== 'string') {
+          throw new Error('security.formatWhitelist.allowedFormats must contain only strings');
+        }
+      }
+    }
+    
+    const booleanFields = ['strictValidation', 'polyglotDetection', 'deepValidation'];
+    for (const field of booleanFields) {
+      if (formatWhitelist[field] !== undefined && typeof formatWhitelist[field] !== 'boolean') {
+        throw new Error(`security.formatWhitelist.${field} must be a boolean`);
+      }
+    }
+  }
+  
+  validateMaliciousDetectionSettings(maliciousDetection) {
+    if (typeof maliciousDetection !== 'object' || maliciousDetection === null) {
+      throw new Error('security.maliciousDetection must be an object');
+    }
+    
+    const booleanFields = [
+      'checkZipBombs', 'checkSvgScripts', 'sanitizeExif', 
+      'detectSteganography', 'checkKnownExploits'
+    ];
+    
+    for (const field of booleanFields) {
+      if (maliciousDetection[field] !== undefined && typeof maliciousDetection[field] !== 'boolean') {
+        throw new Error(`security.maliciousDetection.${field} must be a boolean`);
+      }
     }
   }
   
