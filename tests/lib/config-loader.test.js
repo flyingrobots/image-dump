@@ -33,7 +33,41 @@ describe('ConfigLoader', () => {
         outputDir: 'optimized',
         generateThumbnails: true,
         thumbnailWidth: 200,
-        preserveMetadata: false
+        preserveMetadata: false,
+        security: {
+          enforceValidation: true,
+          enforceResourceLimits: true,
+          enforceFormatWhitelist: true,
+          detectMaliciousContent: true,
+          sanitizeFiles: true,
+          blockOnThreat: true,
+          logSecurityEvents: true,
+          validation: {
+            maxFileSize: 50 * 1024 * 1024,
+            maxWidth: 10000,
+            maxHeight: 10000,
+            minWidth: 1,
+            minHeight: 1
+          },
+          resourceLimits: {
+            maxMemoryPerImage: 512 * 1024 * 1024,
+            maxCpuTimePerImage: 60000,
+            maxConcurrentProcesses: 4
+          },
+          formatWhitelist: {
+            allowedFormats: ['jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tiff'],
+            strictValidation: true,
+            polyglotDetection: true,
+            deepValidation: true
+          },
+          maliciousDetection: {
+            checkZipBombs: true,
+            checkSvgScripts: true,
+            sanitizeExif: true,
+            detectSteganography: false,
+            checkKnownExploits: true
+          }
+        }
       });
     });
     
