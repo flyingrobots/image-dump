@@ -23,7 +23,7 @@ class ImageProcessor {
     }
 
     // Process all output formats in parallel
-    const promises = outputConfigs.map(async (config) => {
+    const promises = outputConfigs.map(async config => {
       try {
         const processor = image.clone();
         

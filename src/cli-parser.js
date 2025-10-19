@@ -17,6 +17,14 @@ class CliParser {
       errorLog: this.getStringValue('--error-log=', 'image-optimization-errors.log')
     };
 
+    const selectedFilesValue = this.getStringValue('--files=', '');
+    if (selectedFilesValue) {
+      options.selectedFiles = selectedFilesValue
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+    }
+
     return options;
   }
 
@@ -51,6 +59,7 @@ Options:
   --max-retries=N      Maximum retry attempts for failed images (default: 3)
   --retry-delay=MS     Delay between retries in milliseconds (default: 1000)
   --error-log=PATH     Path to error log file (default: image-optimization-errors.log)
+  --files=a.jpg,b.png  Comma-separated list of specific images to process
   --help, -h           Show this help message
 
 Examples:

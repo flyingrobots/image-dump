@@ -129,8 +129,9 @@ describe('Configuration End-to-End', () => {
       expect(exitCode).toBe(0);
       
       const outputFiles = await fs.readdir(path.join(testDir, 'optimized'));
-      expect(outputFiles).toContain('test-image.png');
-      expect(outputFiles).toHaveLength(1); // Only original
+      const filteredOutputs = outputFiles.filter(name => name !== '.image-manifest.json');
+      expect(filteredOutputs).toContain('test-image.png');
+      expect(filteredOutputs).toHaveLength(1); // Only original
     });
   });
   

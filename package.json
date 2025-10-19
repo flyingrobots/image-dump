@@ -9,7 +9,7 @@
     "test:watch": "docker compose run --rm test-watch",
     "lint": "docker compose run --rm -T lint",
     "lint:fix": "docker compose run --rm -T -e LINT_COMMAND=_docker:lint:fix lint",
-    "optimize": "docker compose run --rm optimize",
+    "optimize": "bash scripts/optimize-with-gum.sh",
     "optimize:force": "docker compose run --rm optimize-force",
     "optimize:lfs": "docker compose run --rm optimize-lfs",
     "optimize:watch": "docker compose run --rm optimize-watch",
