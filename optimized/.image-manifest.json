@@ -1,0 +1,15 @@
+{
+  "records": {
+    "yung-linus-cover.jpg": {
+      "sourceHash": "6331c5945bf47d5f6ff89098f6cec890dd3d453c8eb4fe4cb928b22012c398f0",
+      "outputs": [
+        "yung-linus-cover.webp",
+        "yung-linus-cover.avif",
+        "yung-linus-cover.jpg",
+        "yung-linus-cover-thumb.webp"
+      ],
+      "configSignature": "a5bc81c55f8262862f587f7d438e0d7178cd62b4",
+      "processedAt": "2025-10-19T23:39:38.727Z"
+    }
+  }
+}
