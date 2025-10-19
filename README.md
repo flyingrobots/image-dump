@@ -86,6 +86,7 @@ Create `.imagerc` in your project root:
   "generateThumbnails": true,
   "thumbnailWidth": 200,
   "preserveMetadata": false,
+  "parallelBatchSize": 5,
   "security": {
     "maxFileSize": 52428800,
     "maxDimensions": { "width": 10000, "height": 10000 },

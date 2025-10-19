@@ -17,6 +17,7 @@ const ConfigLoader = require('./config-loader');
 const ErrorRecoveryManager = require('./error-recovery-manager');
 const ProgressManager = require('./progress-manager');
 const QualityRulesEngine = require('./quality-rules-engine');
+const ImageManifest = require('./image-manifest');
 
 class DependencyContainer {
   constructor(options = {}) {
@@ -125,6 +126,19 @@ class DependencyContainer {
     return this.instances.timestampChecker;
   }
 
+  getImageManifest(outputDir) {
+    if (!this.instances.imageManifests) {
+      this.instances.imageManifests = {};
+    }
+
+    if (!this.instances.imageManifests[outputDir]) {
+      const manifestPath = path.join(outputDir, '.image-manifest.json');
+      this.instances.imageManifests[outputDir] = new ImageManifest(manifestPath);
+    }
+
+    return this.instances.imageManifests[outputDir];
+  }
+
   getImageProcessor(config = {}) {
     if (!this.instances.imageProcessor) {
       this.instances.imageProcessor = new ImageProcessor(sharp, config);
@@ -146,19 +160,25 @@ class DependencyContainer {
     return this.instances.processingConfigGenerator;
   }
 
+  createImageOptimizer(config, logger) {
+    return new ImageOptimizer({
+      ...config,
+      gitLfsDetector: this.getGitLfsDetector(),
+      gitLfsPuller: this.getGitLfsPuller(logger),
+      timestampChecker: this.getFileTimestampChecker(),
+      imageProcessor: this.getImageProcessor(config),
+      pathGenerator: this.getOutputPathGenerator(config.outputDir),
+      processingConfigGenerator: this.getProcessingConfigGenerator(config),
+      fileOperations: this.createFileOperations(),
+      imageManifest: this.getImageManifest(config.outputDir),
+      logger
+    });
+  }
+
   getImageOptimizer(config, logger) {
+    console.warn('DEPRECATED: getImageOptimizer provides a singleton. Use createImageOptimizer for new instances.');
     if (!this.instances.optimizer) {
-      this.instances.optimizer = new ImageOptimizer({
-        ...config,
-        gitLfsDetector: this.getGitLfsDetector(),
-        gitLfsPuller: this.getGitLfsPuller(logger),
-        timestampChecker: this.getFileTimestampChecker(),
-        imageProcessor: this.getImageProcessor(config),
-        pathGenerator: this.getOutputPathGenerator(config.outputDir),
-        processingConfigGenerator: this.getProcessingConfigGenerator(config),
-        fileOperations: this.createFileOperations(),
-        logger
-      });
+      this.instances.optimizer = this.createImageOptimizer(config, logger);
     }
     return this.instances.optimizer;
   }

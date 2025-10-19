@@ -22,9 +22,8 @@ class ImageProcessor {
       // Default behavior - strip metadata
     }
 
-    const results = [];
-    
-    for (const config of outputConfigs) {
+    // Process all output formats in parallel
+    const promises = outputConfigs.map(async (config) => {
       try {
         const processor = image.clone();
         
@@ -36,12 +35,14 @@ class ImageProcessor {
         }
 
         await processor[config.format](config.options).toFile(config.outputPath);
-        results.push({ path: config.outputPath, success: true });
+        return { path: config.outputPath, success: true };
       } catch (error) {
-        results.push({ path: config.outputPath, success: false, error: error.message });
+        return { path: config.outputPath, success: false, error: error.message };
       }
-    }
+    });
 
+    // Wait for all formats to complete
+    const results = await Promise.all(promises);
     return results;
   }
 }
