@@ -1,21 +1,11 @@
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsp = fs.promises;
+const crypto = require('crypto');
 
 class ImageOptimizer {
   constructor(config = {}) {
-    // If config is passed directly, use it
     if (config.formats || config.quality || config.outputDir) {
-      this.config = config;
-      this.gitLfsDetector = config.gitLfsDetector;
-      this.gitLfsPuller = config.gitLfsPuller;
-      this.timestampChecker = config.timestampChecker;
-      this.imageProcessor = config.imageProcessor;
-      this.pathGenerator = config.pathGenerator;
-      this.processingConfigGenerator = config.processingConfigGenerator;
-      this.fileOperations = config.fileOperations;
-      this.logger = config.logger;
-    } else {
-      // Legacy constructor with individual dependencies
       const {
         gitLfsDetector,
         gitLfsPuller,
@@ -24,9 +14,12 @@ class ImageOptimizer {
         pathGenerator,
         processingConfigGenerator,
         fileOperations,
-        logger
+        logger,
+        imageManifest,
+        ...optimizerConfig
       } = config;
-      
+
+      this.config = optimizerConfig;
       this.gitLfsDetector = gitLfsDetector;
       this.gitLfsPuller = gitLfsPuller;
       this.timestampChecker = timestampChecker;
@@ -35,8 +28,30 @@ class ImageOptimizer {
       this.processingConfigGenerator = processingConfigGenerator;
       this.fileOperations = fileOperations;
       this.logger = logger;
-      
-      // Default config
+      this.imageManifest = imageManifest;
+    } else {
+      const {
+        gitLfsDetector,
+        gitLfsPuller,
+        timestampChecker,
+        imageProcessor,
+        pathGenerator,
+        processingConfigGenerator,
+        fileOperations,
+        logger,
+        imageManifest
+      } = config;
+
+      this.gitLfsDetector = gitLfsDetector;
+      this.gitLfsPuller = gitLfsPuller;
+      this.timestampChecker = timestampChecker;
+      this.imageProcessor = imageProcessor;
+      this.pathGenerator = pathGenerator;
+      this.processingConfigGenerator = processingConfigGenerator;
+      this.fileOperations = fileOperations;
+      this.logger = logger;
+      this.imageManifest = imageManifest;
+
       this.config = {
         formats: ['webp', 'avif', 'original'],
         quality: {
@@ -50,6 +65,8 @@ class ImageOptimizer {
         preserveMetadata: false
       };
     }
+
+    this.configSignature = this._computeConfigSignature(this.config);
   }
 
   async optimizeImage(inputPath, filename, options = {}) {
@@ -77,18 +94,30 @@ class ImageOptimizer {
       }
     }
 
-    // Generate output paths based on config
-    const paths = this.generateConfiguredPaths(filename);
-    const outputPaths = Object.values(paths);
+    const sourceHash = options.sourceHash || await this._computeFileHash(inputPath);
 
-    // Check if processing is needed
+    if (!options.forceReprocess && this.imageManifest) {
+      const record = this.imageManifest.get(filename);
+      if (record && record.sourceHash === sourceHash && record.configSignature === this.configSignature) {
+        const outputsExist = await this._outputsExist(record.outputs || []);
+        if (outputsExist) {
+          this.logger.log(`⏭️  Skipping ${filename} (already cooked)`);
+          return 'skipped';
+        }
+      }
+    }
+
+    // Generate output paths based on config
+    const configuredPaths = this.generateConfiguredPaths(filename);
+    const outputPaths = Object.values(configuredPaths);
+
     const needsProcessing = await this.timestampChecker.shouldProcess(
-      inputPath, 
-      outputPaths, 
+      inputPath,
+      outputPaths,
       options.forceReprocess
     );
 
-    if (!needsProcessing) {
+    if (!needsProcessing && !options.forceReprocess) {
       this.logger.log(`⏭️  Skipping ${filename} (already up to date)`);
       return 'skipped';
     }
@@ -96,12 +125,14 @@ class ImageOptimizer {
     try {
       // Ensure output directory exists
       const outputDir = path.dirname(path.join(this.config.outputDir, filename));
-      await fs.mkdir(outputDir, { recursive: true });
+      await fsp.mkdir(outputDir, { recursive: true });
       
       // Handle special cases
       if (ext === '.gif') {
-        await this.fileOperations.copyFile(inputPath, path.join(this.config.outputDir, filename));
+        const copyPath = path.join(this.config.outputDir, filename);
+        await this.fileOperations.copyFile(inputPath, copyPath);
         this.logger.log(`✅ Copied ${filename} (GIF files are not optimized)`);
+        this._updateManifest(filename, sourceHash, [this._relativeToOutputDir(copyPath)]);
         return 'processed';
       }
 
@@ -115,7 +146,7 @@ class ImageOptimizer {
       if (configs.length > 0) {
         // Ensure output directory exists
         const outputDir = path.dirname(configs[0].outputPath);
-        await fs.mkdir(outputDir, { recursive: true });
+        await fsp.mkdir(outputDir, { recursive: true });
         
         const results = await this.imageProcessor.processImage(inputPath, configs);
         const failed = results.filter(r => !r.success);
@@ -123,6 +154,8 @@ class ImageOptimizer {
           throw new Error(`Failed to process ${filename}: ${failed[0].error}`);
         }
         this.logger.log(`✅ Optimized ${filename}`);
+        const manifestOutputs = configs.map(config => this._relativeToOutputDir(config.outputPath));
+        this._updateManifest(filename, sourceHash, manifestOutputs);
       }
       
       return 'processed';
@@ -165,7 +198,7 @@ class ImageOptimizer {
     
     return paths;
   }
-  
+
   getProcessingConfigs(filename, _inputPath) {
     const name = path.parse(filename).name;
     const ext = path.parse(filename).ext.toLowerCase();
@@ -213,6 +246,79 @@ class ImageOptimizer {
     }
     
     return configs;
+  }
+
+  getManifest() {
+    return this.imageManifest;
+  }
+
+  async flushManifest() {
+    if (this.imageManifest) {
+      await this.imageManifest.save();
+    }
+  }
+
+  _computeConfigSignature(config) {
+    const relevant = {
+      formats: config.formats,
+      quality: config.quality,
+      generateThumbnails: config.generateThumbnails,
+      thumbnailWidth: config.thumbnailWidth,
+      preserveMetadata: config.preserveMetadata
+    };
+    return crypto
+      .createHash('sha1')
+      .update(JSON.stringify(relevant))
+      .digest('hex');
+  }
+
+  _computeFileHash(filePath) {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+      stream.on('data', chunk => hash.update(chunk));
+      stream.on('error', reject);
+      stream.on('end', () => resolve(hash.digest('hex')));
+    });
+  }
+
+  async _outputsExist(relativeOutputs = []) {
+    const checks = await Promise.all(
+      relativeOutputs.map(async relativePath => {
+        const absolute = path.join(this.config.outputDir, relativePath);
+        try {
+          await fsp.access(absolute);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+    );
+
+    return relativeOutputs.length === 0 || checks.every(Boolean);
+  }
+
+  _updateManifest(filename, sourceHash, outputs) {
+    if (!this.imageManifest) {
+      return;
+    }
+
+    const normalizedOutputs = Array.from(
+      new Set((outputs || []).filter(Boolean))
+    );
+
+    const record = {
+      sourceHash,
+      outputs: normalizedOutputs,
+      configSignature: this.configSignature,
+      processedAt: new Date().toISOString()
+    };
+
+    this.imageManifest.update(filename, record);
+  }
+
+  _relativeToOutputDir(absolutePath) {
+    return path.relative(this.config.outputDir, absolutePath);
   }
 }
 

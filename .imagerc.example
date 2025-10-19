@@ -8,9 +8,13 @@
   "outputDir": "optimized",
   "generateThumbnails": true,
   "thumbnailWidth": 200,
-  "preserveMetadata": false
+  "preserveMetadata": false,
+  "parallelBatchSize": 5
 }
 
+// Parallel processing configuration:
+// "parallelBatchSize": 5  // Number of images to process concurrently (default: 5)
+//
 // Metadata preservation examples:
 // 
 // Strip all metadata (default):

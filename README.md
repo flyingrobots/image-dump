@@ -36,6 +36,8 @@ npm run optimize:force
 npm run optimize:watch
 ```
 
+The `optimize` script now opens a [gum](https://github.com/charmbracelet/gum) picker so you can interactively choose which images to cook. Press <kbd>space</kbd> to toggle selections and <kbd>enter</kbd> to start the batch. Set `OPTIMIZE_NO_GUM=1` or run in a non-interactive shell to skip the picker and process everything automatically.
+
 ## Features
 
 ### 🎨 Image Processing
@@ -55,12 +57,13 @@ npm run optimize:watch
 - **Deep Scanning** - Optional steganography detection
 
 ### 🚄 Performance
-- Skip processing for unchanged files
+- Manifest-based hashing prevents reprocessing unchanged files
 - Concurrent processing with controlled parallelism
 - Git LFS support for large files
 - Resume interrupted batches
 - Real-time progress with ETA
 - Docker-based for consistent performance
+- Gum-powered picker for targeted batches
 
 ### ⚙️ Configuration
 - `.imagerc` file for project settings
@@ -86,6 +89,7 @@ Create `.imagerc` in your project root:
   "generateThumbnails": true,
   "thumbnailWidth": 200,
   "preserveMetadata": false,
+  "parallelBatchSize": 5,
   "security": {
     "maxFileSize": 52428800,
     "maxDimensions": { "width": 10000, "height": 10000 },
@@ -156,6 +160,10 @@ npm run optimize -- --quiet
 # Custom config file
 npm run optimize -- --config=production.imagerc
 ```
+
+## Cache Manifest
+
+Each optimization run maintains an `optimized/.image-manifest.json` file that records the SHA-256 digest of every cooked source image and the outputs that were generated. The manifest allows the optimizer to skip work reliably—even if timestamps change—and doubles as a quick audit log of what was produced. Commit it alongside your optimized assets, or delete it to force a full rebuild on the next run.
 
 ## GitHub Actions
 

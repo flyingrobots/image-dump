@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 
 class ImageOptimizerApp {
   constructor({
@@ -9,121 +10,102 @@ class ImageOptimizerApp {
     qualityRulesEngine,
     optimizer,
     logger,
+    manifest,
+    dependencyContainer, // Add this
     inputDir = 'original'
   }) {
     this.config = config;
     this.progressManager = progressManager;
     this.errorRecoveryManager = errorRecoveryManager;
     this.qualityRulesEngine = qualityRulesEngine;
-    this.optimizer = optimizer;
+    this.optimizer = optimizer; // This will be the singleton for single-threaded tasks
     this.logger = logger;
     this.inputDir = inputDir;
+    this.manifest = manifest;
+    this.dependencyContainer = dependencyContainer; // Store the container
   }
 
   async processImages(options = {}) {
-    const { forceReprocess, pullLfs, continueOnError, resumeFlag } = options;
-    
+    const { forceReprocess, pullLfs, continueOnError, resumeFlag, selectedFiles } = options;
+  
     try {
       await fs.mkdir(this.config.outputDir, { recursive: true });
-      
-      const imageFiles = await this._findImageFiles(this.inputDir);
-      
+  
+      const allImageFiles = await this._findImageFiles(this.inputDir);
+      const imageFiles = this._applySelection(allImageFiles, selectedFiles);
+  
       if (imageFiles.length === 0) {
-        this.logger.log('No images found in the original directory');
+        this.logger.log(selectedFiles?.length > 0 ? 'No matching images to process' : 'No images found in the original directory');
         return { processed: 0, skipped: 0, errors: 0, lfsPointers: 0, lfsErrors: 0 };
       }
-      
+  
       this.progressManager.start(imageFiles.length);
-      
       this.logger.log(`Found ${imageFiles.length} images to process...`);
-      if (forceReprocess) {
-        this.logger.log('Force reprocessing enabled - all images will be regenerated');
-      }
-      if (pullLfs) {
-        this.logger.log('Git LFS auto-pull enabled - pointer files will be downloaded');
-      }
+      if (forceReprocess) {this.logger.log('Force reprocessing enabled - all images will be regenerated');}
+      if (pullLfs) {this.logger.log('Git LFS auto-pull enabled - pointer files will be downloaded');}
       this.logger.log('');
-      
-      const stats = {
-        processed: 0,
-        skipped: 0,
-        errors: 0,
-        lfsPointers: 0,
-        lfsErrors: 0
-      };
-      
+  
+      const stats = { processed: 0, skipped: 0, errors: 0, lfsPointers: 0, lfsErrors: 0 };
       const savedState = await this.errorRecoveryManager.loadState();
       let startIndex = 0;
-      
       if (resumeFlag && savedState) {
-        // Handle both old and new state formats
         startIndex = savedState.checkpoint?.processedCount || savedState.progress?.processed || 0;
-        if (startIndex > 0) {
-          this.logger.log(`📂 Resuming from previous state... (starting at image ${startIndex + 1})`);
-        }
+        if (startIndex > 0) {this.logger.log(`📂 Resuming from previous state... (starting at image ${startIndex + 1})`);}
       }
-      
+  
       const filesToProcess = imageFiles.slice(startIndex);
-      
-      for (let i = 0; i < filesToProcess.length; i++) {
-        const file = filesToProcess[i];
-        
-        this.progressManager.setFilename(file);
-        
-        try {
-          const imageQuality = await this.qualityRulesEngine.getQualityForImage(
-            path.join(this.inputDir, file)
-          );
-          
-          const mergedQuality = {
-            ...this.config.quality,
-            ...imageQuality
-          };
-          
-          const result = await this.optimizer.optimizeImage(
-            path.join(this.inputDir, file), 
-            file,
-            { 
-              forceReprocess, 
-              pullLfs,
-              quality: mergedQuality
+      const fileQueue = [...filesToProcess];
+  
+      const numWorkers = this.config.parallelBatchSize || os.cpus().length;
+      this.logger.log(`Spawning ${numWorkers} workers for parallel processing...`);
+  
+      const workers = Array.from({ length: numWorkers }, (_, _i) => {
+        return (async () => {
+          // Each worker gets its own optimizer instance
+          const optimizer = this.dependencyContainer.createImageOptimizer(this.config, this.logger);
+  
+          while (fileQueue.length > 0) {
+            const file = fileQueue.shift();
+            if (!file) {continue;}
+  
+            try {
+              const imageQuality = await this.qualityRulesEngine.getQualityForImage(path.join(this.inputDir, file));
+              const mergedQuality = { ...this.config.quality, ...imageQuality };
+  
+              const result = await optimizer.optimizeImage(
+                path.join(this.inputDir, file),
+                file,
+                { forceReprocess, pullLfs, quality: mergedQuality }
+              );
+  
+              this._updateStats(stats, result, file);
+  
+              if (result === 'error') {
+                const error = new Error(`Failed to process ${file}`);
+                await this.errorRecoveryManager.logError(file, error, { type: 'processing_error' });
+                if (!continueOnError) {throw error;}
+              }
+  
+              this.errorRecoveryManager.recordProcessedFile(file, { status: result });
+            } catch (error) {
+              stats.errors++;
+              this.progressManager.increment({ status: 'error', filename: file });
+              await this.errorRecoveryManager.logError(file, error, { type: 'processing_error' });
+              if (!continueOnError) {throw error;}
             }
-          );
-          
-          this._updateStats(stats, result, file);
-          
-          if (result === 'error') {
-            // Log the error even if continuing on error
-            const error = new Error(`Failed to process ${file}`);
-            await this.errorRecoveryManager.logError(file, error, { type: 'processing_error' });
-            
-            if (!continueOnError) {
-              throw error;
-            }
           }
-          
-          this.errorRecoveryManager.recordProcessedFile(file, { status: result });
-          
-          if (i % 10 === 0) {
-            await this.errorRecoveryManager.saveState({ 
-              processedCount: i + 1,
-              totalCount: imageFiles.length 
-            });
-          }
-          
-        } catch (error) {
-          stats.errors++;
-          this.progressManager.increment({ status: 'error', filename: file });
-          await this.errorRecoveryManager.logError(file, error, { type: 'processing_error' });
-          
-          if (!continueOnError) {
-            throw error;
-          }
-        }
+        })();
+      });
+  
+      await Promise.all(workers);
+  
+      // Save manifest after all workers are done
+      if (this.manifest?.isDirty()) {
+        await this.manifest.save();
       }
-      
+  
       this.progressManager.finish(false);
-      
+  
       if (stats.errors === 0) {
         await this.errorRecoveryManager.clearState();
       } else {
@@ -132,17 +114,19 @@ class ImageOptimizerApp {
           totalCount: imageFiles.length 
         });
       }
-      
+  
       return stats;
-      
+  
     } catch (error) {
       this.progressManager.finish();
       this.logger.error('Fatal error:', error);
       await this.errorRecoveryManager.logError('FATAL', error, { type: 'fatal' });
+      if (this.manifest?.isDirty()) {
+        await this.manifest.save();
+      }
       throw error;
     }
   }
-
   async _findImageFiles(dir, relativePath = '') {
     const files = [];
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -161,6 +145,23 @@ class ImageOptimizerApp {
     }
     
     return files;
+  }
+
+  _applySelection(allFiles, selectedFiles = []) {
+    if (!selectedFiles || selectedFiles.length === 0) {
+      return allFiles;
+    }
+
+    const normalizedSelection = selectedFiles.map(file => file.replace(/\\/g, '/'));
+    const available = new Set(allFiles.map(file => file.replace(/\\/g, '/')));
+    const normalized = new Set(normalizedSelection);
+
+    const missing = normalizedSelection.filter(item => !available.has(item));
+    if (missing.length > 0 && this.logger && typeof this.logger.log === 'function') {
+      this.logger.log(`Skipping ${missing.length} selected item(s) not found: ${missing.join(', ')}`);
+    }
+
+    return allFiles.filter(file => normalized.has(file.replace(/\\/g, '/')));
   }
 
   watchForChanges(options = {}) {
@@ -208,6 +209,9 @@ class ImageOptimizerApp {
           this.logger.log(`✅ ${action === 'add' ? 'Optimized' : 'Re-optimized'} ${file}`);
         } else if (result === 'error') {
           this.logger.error(`❌ Failed to optimize ${file}`);
+        }
+        if (typeof this.optimizer.flushManifest === 'function') {
+          await this.optimizer.flushManifest();
         }
       } catch (error) {
         this.logger.error(`❌ Error processing ${file}:`, error.message);

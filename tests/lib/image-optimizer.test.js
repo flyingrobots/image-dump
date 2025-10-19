@@ -1,4 +1,5 @@
 const ImageOptimizer = require('../../src/image-optimizer');
+const ImageManifest = require('../../src/image-manifest');
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
@@ -11,6 +12,7 @@ describe('ImageOptimizer', () => {
   
   // Create actual test dependencies that behave like the real ones
   let testDependencies;
+  let imageManifest;
 
   beforeEach(async () => {
     // Create temporary directories for testing
@@ -20,6 +22,10 @@ describe('ImageOptimizer', () => {
     
     await fs.mkdir(inputDir, { recursive: true });
     await fs.mkdir(outputDir, { recursive: true });
+
+    const manifestPath = path.join(outputDir, '.image-manifest.json');
+    imageManifest = new ImageManifest(manifestPath);
+    await imageManifest.load();
 
     // Create test dependencies with behavior-driven implementations
     testDependencies = {
@@ -133,7 +139,8 @@ describe('ImageOptimizer', () => {
       logger: {
         log: () => {}, // Silent in tests
         error: () => {}
-      }
+      },
+      imageManifest
     };
     
     // Add default config that matches actual usage
@@ -218,6 +225,47 @@ describe('ImageOptimizer', () => {
       // Verify files weren't overwritten
       const webpContent = await fs.readFile(paths.webp, 'utf8');
       expect(webpContent).toBe('processed'); // Not changed
+    });
+
+    it('should use manifest hashes to skip unchanged images even when timestamps suggest reprocessing', async () => {
+      const imagePath = path.join(inputDir, 'manifest.png');
+      await fs.writeFile(imagePath, 'fake-image-data');
+
+      testDependencies.timestampChecker.shouldProcess = jest.fn().mockResolvedValue(true);
+      const processSpy = jest.spyOn(testDependencies.imageProcessor, 'processImage');
+
+      const firstResult = await optimizer.optimizeImage(imagePath, 'manifest.png');
+      expect(firstResult).toBe('processed');
+      expect(processSpy).toHaveBeenCalledTimes(1);
+      expect(testDependencies.timestampChecker.shouldProcess).toHaveBeenCalledTimes(1);
+
+      const secondResult = await optimizer.optimizeImage(imagePath, 'manifest.png');
+      expect(secondResult).toBe('skipped');
+      expect(processSpy).toHaveBeenCalledTimes(1);
+      // Timestamp checker should not need to run again because manifest handled skip
+      expect(testDependencies.timestampChecker.shouldProcess).toHaveBeenCalledTimes(1);
+
+      processSpy.mockRestore();
+    });
+
+    it('should reprocess when file content hash changes', async () => {
+      const imagePath = path.join(inputDir, 'manifest-change.png');
+      await fs.writeFile(imagePath, 'initial-content');
+
+      testDependencies.timestampChecker.shouldProcess = jest.fn().mockResolvedValue(true);
+      const processSpy = jest.spyOn(testDependencies.imageProcessor, 'processImage');
+
+      const firstResult = await optimizer.optimizeImage(imagePath, 'manifest-change.png');
+      expect(firstResult).toBe('processed');
+      expect(processSpy).toHaveBeenCalledTimes(1);
+
+      await fs.writeFile(imagePath, 'mutated-content');
+
+      const secondResult = await optimizer.optimizeImage(imagePath, 'manifest-change.png');
+      expect(secondResult).toBe('processed');
+      expect(processSpy).toHaveBeenCalledTimes(2);
+
+      processSpy.mockRestore();
     });
 
     it('should copy GIF files without processing', async () => {

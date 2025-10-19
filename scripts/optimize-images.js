@@ -10,6 +10,11 @@ async function main() {
     const cliParser = new CliParser();
     const options = cliParser.parse();
 
+    const envSelectedFiles = parseSelectionFromEnv(process.env);
+    if (envSelectedFiles !== null) {
+      options.selectedFiles = envSelectedFiles;
+    }
+
     // Show help if requested
     if (cliParser.hasFlag('--help') || cliParser.hasFlag('-h')) {
       console.log(CliParser.getHelpText());
@@ -23,6 +28,9 @@ async function main() {
     const configLoader = container.getConfigLoader();
     const config = await configLoader.loadConfig();
     
+    const manifest = container.getImageManifest(config.outputDir);
+    await manifest.load();
+
     // Apply CLI overrides
     if (options.noThumbnails) {
       config.generateThumbnails = false;
@@ -56,6 +64,8 @@ async function main() {
       qualityRulesEngine,
       optimizer,
       logger,
+      manifest,
+      dependencyContainer: container,
       inputDir: INPUT_DIR
     });
     
@@ -81,6 +91,30 @@ async function main() {
   } catch (error) {
     console.error('Failed to run image optimizer:', error);
     process.exit(1);
+  }
+}
+
+function parseSelectionFromEnv(env) {
+  if (env.OPTIMIZE_SELECTION_MODE === 'all' || env.OPTIMIZE_SELECTION_ALL === '1') {
+    return [];
+  }
+
+  const encoded = env.OPTIMIZE_SELECTION_B64;
+  if (!encoded) {
+    return null;
+  }
+
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    return decoded
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => line.replace(/^\.\/?/, ''))
+      .map(line => line.replace(/^original\//, ''));
+  } catch (error) {
+    console.error('Failed to parse OPTIMIZE_SELECTION_B64:', error.message);
+    return null;
   }
 }
 

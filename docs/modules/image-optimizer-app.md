@@ -251,6 +251,7 @@ Displays a formatted summary of processing results.
 
 ```javascript
 const ImageOptimizerApp = require('./image-optimizer-app');
+const ImageManifest = require('./image-manifest');
 
 // Initialize with dependencies
 const app = new ImageOptimizerApp({
@@ -263,7 +264,8 @@ const app = new ImageOptimizerApp({
   errorRecoveryManager: new ErrorRecoveryManager(),
   qualityRulesEngine: new QualityRulesEngine(),
   optimizer: new ImageOptimizer(),
-  logger: console
+  logger: console,
+  manifest: new ImageManifest('optimized/.image-manifest.json')
 });
 
 // Process all images
