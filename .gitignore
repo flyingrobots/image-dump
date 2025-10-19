@@ -104,3 +104,6 @@ performance-reports/
 *.swp
 *.swo
 *~
+# Ignore original and optimized images
+original/
+optimized/
