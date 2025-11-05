@@ -5,6 +5,7 @@ class ConfigLoader {
     this.path = dependencies.path || require('path');
     
     this.defaultConfig = {
+      // Align with docs and ImageOptimizer defaults: include 'original' output
       formats: ['webp', 'avif', 'original'],
       quality: {
         webp: 80,
