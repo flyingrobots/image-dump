@@ -166,37 +166,31 @@ class ImageOptimizer {
   }
   
   generateConfiguredPaths(filename) {
-    const name = path.parse(filename).name;
+    // Delegate to the path generator so subdirectories are preserved
+    const paths = this.pathGenerator.generatePaths(filename);
     const ext = path.parse(filename).ext.toLowerCase();
-    const paths = {};
-    
-    // Generate paths based on configured formats
-    if (this.config.formats.includes('webp')) {
-      paths.webp = path.join(this.config.outputDir, `${name}.webp`);
+
+    const selected = {};
+
+    // Match processing behavior: skip WebP→WebP conversion
+    if (this.config.formats.includes('webp') && ext !== '.webp') {
+      selected.webp = paths.webp;
     }
-    
     if (this.config.formats.includes('avif')) {
-      paths.avif = path.join(this.config.outputDir, `${name}.avif`);
+      selected.avif = paths.avif;
     }
-    
-    if (this.config.formats.includes('original') || 
-        this.config.formats.includes('jpeg') || 
-        this.config.formats.includes('png')) {
-      // Determine output extension
-      let outputExt = ext;
-      if (ext === '.jpeg' || ext === '.jpg') {
-        outputExt = this.config.formats.includes('jpeg') ? '.jpg' : ext;
-      } else if (ext === '.png') {
-        outputExt = '.png';
-      }
-      paths.original = path.join(this.config.outputDir, `${name}${outputExt}`);
+    if (
+      this.config.formats.includes('original') ||
+      (ext === '.png' && this.config.formats.includes('png')) ||
+      ((ext === '.jpg' || ext === '.jpeg') && this.config.formats.includes('jpeg'))
+    ) {
+      selected.original = paths.original;
     }
-    
     if (this.config.generateThumbnails) {
-      paths.thumbnail = path.join(this.config.outputDir, `${name}-thumb.webp`);
+      selected.thumbnail = paths.thumbnail;
     }
-    
-    return paths;
+
+    return selected;
   }
 
   getProcessingConfigs(filename, _inputPath) {
