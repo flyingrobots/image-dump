@@ -1,3 +1,5 @@
+name: image-dump
+
 services:
   # Linting service
   lint:
@@ -5,6 +7,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
+    image: image-dump/lint:dev
     volumes:
       - ./scripts:/app/scripts${LINT_MOUNT_MODE:-:ro}
       - ./src:/app/src${LINT_MOUNT_MODE:-:ro}
@@ -19,6 +22,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+    image: image-dump/optimize:prod
     volumes:
       - ./original:/app/original:ro
       - ./optimized:/app/optimized
@@ -37,6 +41,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
+    image: image-dump/test:dev
     volumes:
       - ./scripts:/app/scripts${TEST_MOUNT_MODE:-:ro}
       - ./src:/app/src${TEST_MOUNT_MODE:-:ro}
@@ -71,13 +76,19 @@ services:
 
   test-coverage:
     extends: test
+    image: image-dump/test-coverage:dev
     environment:
       - TEST_COMMAND=_docker:test:coverage
       - NODE_ENV=test
 
   test-watch:
     extends: test
+    image: image-dump/test-watch:dev
     environment:
       - TEST_COMMAND=_docker:test:watch
       - TEST_MOUNT_MODE=  # Empty means read-write for watch mode
       - NODE_ENV=test
+
+networks:
+  default:
+    name: image-dump_net

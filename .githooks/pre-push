@@ -1,5 +1,7 @@
 #!/bin/sh
-# Pre-push hook that runs tests before pushing
+# Pre-push hook that runs tests before pushing (fast + robust)
+set -euo pipefail
+trap 'echo; echo "❌ Aborted"; exit 130' INT TERM
 
 echo "🚀 Running tests before push..."
 echo ""
@@ -20,11 +22,16 @@ else
     NEEDS_BUILD=1
 fi
 
-# Export build decision for Makefile
+# Export build decision for Makefile / scripts
 export DOCKER_BUILD_NEEDED=$NEEDS_BUILD
 export DOCKER_BUILD_CHECKSUM=$CURRENT_CHECKSUM
 export DOCKER_BUILD_CHECKSUM_FILE=$LAST_BUILD_FILE
 export OPTIMIZE_FLAGS=""
+# Speed up local pushes: skip full docker build step in scripts/test.sh
+export SKIP_DOCKER_BUILD=1
+
+# Non-interactive test environment
+export CI=1
 
 # Run tests (which includes all CI checks)
 npm test
