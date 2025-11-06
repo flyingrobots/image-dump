@@ -35,7 +35,9 @@
 //   "maxRetries": 3,              // Retry attempts for transient errors
 //   "retryDelay": 1000,           // Initial retry delay (ms)
 //   "exponentialBackoff": true,   // Use exponential backoff
-//   "errorLog": "errors.log"      // Custom error log path
+//   "errorLog": "errors.log",     // Custom error log path
+//   "checkpointEveryN": 5,         // Save a checkpoint every N files (0 disables count trigger)
+//   "checkpointIntervalMs": 2000   // Minimum ms between checkpoints (0 disables time throttle)
 // }
 //
 // Per-image quality rules:
