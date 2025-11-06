@@ -9,6 +9,12 @@ class ErrorRecoveryManager {
     this.exponentialBackoff = options.exponentialBackoff !== false;
     this.processedFiles = new Map();
     this.logger = options.logger || console;
+    // Periodic checkpoint configuration
+    this.checkpointEveryN = options.checkpointEveryN || 5;
+    this.checkpointIntervalMs = options.checkpointIntervalMs || 2000;
+    this._lastCheckpointTime = 0;
+    this._sinceLastCheckpointCount = 0;
+    this._checkpointMutex = false;
     
     // Delegate state persistence and error logging
     this.statePersistence = new StatePersistenceManager({
@@ -110,6 +116,7 @@ class ErrorRecoveryManager {
 
   recordProcessedFile(filePath, result) {
     this.processedFiles.set(filePath, result);
+    this._sinceLastCheckpointCount++;
   }
 
   isFileProcessed(filePath) {
@@ -153,6 +160,11 @@ class ErrorRecoveryManager {
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Structure: throttled checkpoint (implementation added in behavior commit)
+  async maybeCheckpoint(_context = {}) {
+    // placeholder; behavior implemented in subsequent commit
   }
 }
 
