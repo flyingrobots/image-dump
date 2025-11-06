@@ -164,7 +164,52 @@ class ErrorRecoveryManager {
 
   // Structure: throttled checkpoint (implementation added in behavior commit)
   async maybeCheckpoint(_context = {}) {
-    // placeholder; behavior implemented in subsequent commit
+    const total = _context.total || _context.totalCount || _context.totalFiles || 0;
+
+    const now = Date.now();
+    const processed = this.processedFiles.size;
+
+    const byCount = this._sinceLastCheckpointCount >= Math.max(1, this.checkpointEveryN);
+    const byTime = (now - this._lastCheckpointTime) >= Math.max(0, this.checkpointIntervalMs);
+
+    if (!byCount && !byTime) {
+      return; // nothing to do
+    }
+
+    if (this._checkpointMutex) {
+      return; // another checkpoint in flight
+    }
+
+    this._checkpointMutex = true;
+    try {
+      // Build a lightweight state snapshot
+      const processedArray = Array.from(this.processedFiles.entries()).map(([p, data]) => ({ path: p, ...data }));
+      const succeeded = processedArray.filter(f => f.status === 'processed' || f.status === 'success').length;
+      const failed = processedArray.filter(f => f.status === 'error' || f.status === 'failed').length;
+
+      const snapshot = {
+        startedAt: new Date().toISOString(),
+        total,
+        configuration: {},
+        progress: {
+          total,
+          processed,
+          succeeded,
+          failed,
+          remaining: total > 0 ? Math.max(0, total - processed) : 0
+        },
+        files: {
+          processed: processedArray,
+          pending: []
+        }
+      };
+
+      await this.statePersistence.save(snapshot);
+      this._lastCheckpointTime = now;
+      this._sinceLastCheckpointCount = 0;
+    } finally {
+      this._checkpointMutex = false;
+    }
   }
 }
 
