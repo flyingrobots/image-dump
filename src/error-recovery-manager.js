@@ -169,11 +169,13 @@ class ErrorRecoveryManager {
     const now = Date.now();
     const processed = this.processedFiles.size;
 
-    const byCount = this._sinceLastCheckpointCount >= Math.max(1, this.checkpointEveryN);
-    const byTime = (now - this._lastCheckpointTime) >= Math.max(0, this.checkpointIntervalMs);
+    const countEnabled = (this.checkpointEveryN || 0) > 0;
+    const timeEnabled = (this.checkpointIntervalMs || 0) > 0;
+    const countReady = !countEnabled || this._sinceLastCheckpointCount >= this.checkpointEveryN;
+    const timeReady = !timeEnabled || (now - this._lastCheckpointTime) >= this.checkpointIntervalMs;
 
-    if (!byCount && !byTime) {
-      return; // nothing to do
+    if (!(countReady && timeReady)) {
+      return; // nothing to do yet
     }
 
     if (this._checkpointMutex) {
