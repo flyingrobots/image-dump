@@ -14,7 +14,9 @@ class CliParser {
       watchMode: this.hasFlag('--watch'),
       maxRetries: this.getIntValue('--max-retries=', 3),
       retryDelay: this.getIntValue('--retry-delay=', 1000),
-      errorLog: this.getStringValue('--error-log=', 'image-optimization-errors.log')
+      errorLog: this.getStringValue('--error-log=', 'image-optimization-errors.log'),
+      checkpointEveryN: this.getIntValue('--checkpoint-every=', undefined),
+      checkpointIntervalMs: this.getIntValue('--checkpoint-interval-ms=', undefined)
     };
 
     const selectedFilesValue = this.getStringValue('--files=', '');
@@ -34,7 +36,9 @@ class CliParser {
 
   getIntValue(prefix, defaultValue) {
     const arg = this.args.find(arg => arg.startsWith(prefix));
-    return arg ? parseInt(arg.split('=')[1]) : defaultValue;
+    if (!arg) { return defaultValue; }
+    const val = parseInt(arg.split('=')[1]);
+    return Number.isNaN(val) ? defaultValue : val;
   }
 
   getStringValue(prefix, defaultValue) {

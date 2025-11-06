@@ -159,11 +159,35 @@ npm run optimize -- --quiet
 
 # Custom config file
 npm run optimize -- --config=production.imagerc
+
+# One-off checkpoint tuning (overrides .imagerc)
+# Save a checkpoint after every N files (0 disables count trigger)
+npm run optimize -- --checkpoint-every=5
+# Minimum milliseconds between checkpoints (0 disables time throttle)
+npm run optimize -- --checkpoint-interval-ms=2000
 ```
 
 ## Cache Manifest
 
 Each optimization run maintains an `optimized/.image-manifest.json` file that records the SHA-256 digest of every cooked source image and the outputs that were generated. The manifest allows the optimizer to skip work reliably—even if timestamps change—and doubles as a quick audit log of what was produced. Commit it alongside your optimized assets, or delete it to force a full rebuild on the next run.
+
+### Resuming Runs and Checkpoints
+
+Long runs periodically save progress to `.image-optimization-state.json`. If a batch is interrupted (e.g., machine reboot or Ctrl+C), rerun with `--resume` to continue from the last checkpoint.
+
+Tune checkpoint behavior via `.imagerc`:
+
+```jsonc
+{
+  "errorRecovery": {
+    "continueOnError": true,
+    "checkpointEveryN": 5,        // Save after every 5 files (0 disables count trigger)
+    "checkpointIntervalMs": 2000  // Minimum ms between checkpoints (0 disables time throttle)
+  }
+}
+```
+
+Use CLI flags to override for a one-off run: `--checkpoint-every=` and `--checkpoint-interval-ms=`.
 
 ## GitHub Actions
 

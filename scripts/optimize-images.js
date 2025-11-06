@@ -47,7 +47,9 @@ async function main() {
       retryDelay: config.errorRecovery?.retryDelay || options.retryDelay,
       exponentialBackoff: config.errorRecovery?.exponentialBackoff !== false,
       errorLog: config.errorRecovery?.errorLog || options.errorLog,
-      resume: options.resumeFlag
+      resume: options.resumeFlag,
+      checkpointEveryN: options.checkpointEveryN !== undefined ? options.checkpointEveryN : config.errorRecovery?.checkpointEveryN,
+      checkpointIntervalMs: options.checkpointIntervalMs !== undefined ? options.checkpointIntervalMs : config.errorRecovery?.checkpointIntervalMs
     });
     
     // Create quality rules engine
