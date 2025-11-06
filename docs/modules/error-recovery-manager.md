@@ -17,6 +17,7 @@ class ErrorRecoveryManager {
   constructor(options = {})
   
   async processWithRecovery(operation, context)
+  async maybeCheckpoint(context)
   async saveState(state)
   async loadState()
   async clearState()
@@ -176,6 +177,21 @@ Initializes the ErrorRecoveryManager with configuration options.
   - `stateFile` (string): Path to state persistence file
   - `errorLog` (string): Path to error log file
   - `logger` (Object): Logger interface (default: console)
+  - `checkpointEveryN` (number): Save a checkpoint every N processed files (default: 5)
+  - `checkpointIntervalMs` (number): Minimum time between checkpoints in ms; set 0 to disable time throttling (default: 2000)
+
+### maybeCheckpoint(context)
+
+Throttled checkpoint that persists progress mid-run.
+
+Checks both a count threshold and an optional time threshold, and writes a lightweight snapshot via `StatePersistenceManager.save(...)`. When `checkpointEveryN` is 0, the count threshold is disabled; when `checkpointIntervalMs` is 0, the time throttle is disabled. A simple internal mutex prevents concurrent writes in parallel contexts.
+
+**Parameters**:
+- `context` (Object): `{ total?: number }` total files in the current batch.
+
+**Behavior**:
+- Saves `progress` (total, processed, succeeded, failed, remaining) and the list of processed files (path + status).
+- Resets the internal count and updates the last-checkpoint timestamp on success.
 
 ### processWithRecovery(operation, context)
 
