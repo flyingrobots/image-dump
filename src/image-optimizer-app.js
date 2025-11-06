@@ -87,10 +87,12 @@ class ImageOptimizerApp {
               }
   
               this.errorRecoveryManager.recordProcessedFile(file, { status: result });
+              await this.errorRecoveryManager.maybeCheckpoint({ total: imageFiles.length });
             } catch (error) {
               stats.errors++;
               this.progressManager.increment({ status: 'error', filename: file });
               await this.errorRecoveryManager.logError(file, error, { type: 'processing_error' });
+              await this.errorRecoveryManager.maybeCheckpoint({ total: imageFiles.length });
               if (!continueOnError) {throw error;}
             }
           }
