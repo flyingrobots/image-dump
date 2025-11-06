@@ -9,6 +9,12 @@ class ErrorRecoveryManager {
     this.exponentialBackoff = options.exponentialBackoff !== false;
     this.processedFiles = new Map();
     this.logger = options.logger || console;
+    // Periodic checkpoint configuration
+    this.checkpointEveryN = options.checkpointEveryN || 5;
+    this.checkpointIntervalMs = options.checkpointIntervalMs || 2000;
+    this._lastCheckpointTime = 0;
+    this._sinceLastCheckpointCount = 0;
+    this._checkpointMutex = false;
     
     // Delegate state persistence and error logging
     this.statePersistence = new StatePersistenceManager({
@@ -110,6 +116,7 @@ class ErrorRecoveryManager {
 
   recordProcessedFile(filePath, result) {
     this.processedFiles.set(filePath, result);
+    this._sinceLastCheckpointCount++;
   }
 
   isFileProcessed(filePath) {
@@ -153,6 +160,58 @@ class ErrorRecoveryManager {
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Structure: throttled checkpoint (implementation added in behavior commit)
+  async maybeCheckpoint(_context = {}) {
+    const total = _context.total || _context.totalCount || _context.totalFiles || 0;
+
+    const now = Date.now();
+    const processed = this.processedFiles.size;
+
+    const countEnabled = (this.checkpointEveryN || 0) > 0;
+    const timeEnabled = (this.checkpointIntervalMs || 0) > 0;
+    const countReady = !countEnabled || this._sinceLastCheckpointCount >= this.checkpointEveryN;
+    const timeReady = !timeEnabled || (now - this._lastCheckpointTime) >= this.checkpointIntervalMs;
+
+    if (!(countReady && timeReady)) {
+      return; // nothing to do yet
+    }
+
+    if (this._checkpointMutex) {
+      return; // another checkpoint in flight
+    }
+
+    this._checkpointMutex = true;
+    try {
+      // Build a lightweight state snapshot
+      const processedArray = Array.from(this.processedFiles.entries()).map(([p, data]) => ({ path: p, ...data }));
+      const succeeded = processedArray.filter(f => f.status === 'processed' || f.status === 'success').length;
+      const failed = processedArray.filter(f => f.status === 'error' || f.status === 'failed').length;
+
+      const snapshot = {
+        startedAt: new Date().toISOString(),
+        total,
+        configuration: {},
+        progress: {
+          total,
+          processed,
+          succeeded,
+          failed,
+          remaining: total > 0 ? Math.max(0, total - processed) : 0
+        },
+        files: {
+          processed: processedArray,
+          pending: []
+        }
+      };
+
+      await this.statePersistence.save(snapshot);
+      this._lastCheckpointTime = now;
+      this._sinceLastCheckpointCount = 0;
+    } finally {
+      this._checkpointMutex = false;
+    }
   }
 }
 
