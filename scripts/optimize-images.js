@@ -54,7 +54,7 @@ async function main() {
     const qualityRulesEngine = container.getQualityRulesEngine(config.qualityRules || []);
     
     // Create optimizer
-    const optimizer = container.getImageOptimizer(config, logger);
+    const optimizer = container.createImageOptimizer(config, logger);
     
     // Create application
     const app = new ImageOptimizerApp({

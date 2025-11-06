@@ -42,6 +42,12 @@ describe('optimize-images.js', () => {
     }
   };
 
+  test('should not print deprecation warnings for optimizer creation', () => {
+    const { output, exitCode } = runScript('--help');
+    expect(exitCode).toBe(0);
+    expect(output).not.toMatch(/DEPRECATED: getImageOptimizer/);
+  });
+
   test('should process valid PNG image without metadata errors', async () => {
     // Create a test PNG image
     await sharp({
