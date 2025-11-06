@@ -27,8 +27,14 @@ echo "2️⃣ Running tests with coverage..."
 docker compose run --rm -T test-coverage
 
 echo ""
-echo "3️⃣ Building all Docker services..."
-docker compose build
+if [ "${SKIP_DOCKER_BUILD:-0}" = "1" ]; then
+    echo "⏭️  Skipping Docker build (SKIP_DOCKER_BUILD=1)."
+elif [ "${DOCKER_BUILD_NEEDED:-0}" = "1" ]; then
+    echo "3️⃣ Building all Docker services..."
+    docker compose build
+else
+    echo "✅ Using cached Docker images (no source changes detected)"
+fi
 
 echo ""
 echo "✅ All checks passed!"
