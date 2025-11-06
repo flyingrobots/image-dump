@@ -186,6 +186,52 @@ describe('ErrorRecoveryManager', () => {
       exists = await fs.access(errorManager.stateFile).then(() => true).catch(() => false);
       expect(exists).toBe(false);
     });
+
+    it('should periodically checkpoint by count', async () => {
+      // Arrange a manager with tiny checkpoint thresholds
+      errorManager.checkpointEveryN = 2;
+      errorManager.checkpointIntervalMs = 0;
+      // Point state file to tempDir for isolation
+      errorManager.statePersistence.stateFile = path.join(tempDir, 'checkpoint-state.json');
+
+      // Act: record 2 files and call maybeCheckpoint after each
+      errorManager.recordProcessedFile('a.png', { status: 'success' });
+      await errorManager.maybeCheckpoint({ total: 5 });
+      let exists = await fs.access(errorManager.stateFile).then(() => true).catch(() => false);
+      expect(exists).toBe(false); // not enough yet
+
+      errorManager.recordProcessedFile('b.png', { status: 'success' });
+      await errorManager.maybeCheckpoint({ total: 5 });
+      exists = await fs.access(errorManager.stateFile).then(() => true).catch(() => false);
+      expect(exists).toBe(true); // checkpoint written at 2 files
+
+      // Verify saved state has processed count
+      const saved = JSON.parse(await fs.readFile(errorManager.stateFile, 'utf8'));
+      expect(saved.progress.processed).toBe(2);
+    });
+
+    it('should throttle checkpoints by time', async () => {
+      errorManager.checkpointEveryN = 1; // allow by count
+      errorManager.checkpointIntervalMs = 100; // throttle by time
+      errorManager.statePersistence.stateFile = path.join(tempDir, 'checkpoint-throttle.json');
+
+      errorManager.recordProcessedFile('x.png', { status: 'success' });
+      await errorManager.maybeCheckpoint({ total: 2 });
+      const first = JSON.parse(await fs.readFile(errorManager.stateFile, 'utf8'));
+      expect(first.progress.processed).toBe(1);
+
+      // Immediately try again; should be throttled and not overwrite processed count 1 -> still 1
+      errorManager.recordProcessedFile('y.png', { status: 'success' });
+      await errorManager.maybeCheckpoint({ total: 2 });
+      const after = JSON.parse(await fs.readFile(errorManager.stateFile, 'utf8'));
+      expect(after.progress.processed).toBe(1);
+
+      // Wait past interval and checkpoint again
+      await new Promise(r => setTimeout(r, 110));
+      await errorManager.maybeCheckpoint({ total: 2 });
+      const final = JSON.parse(await fs.readFile(errorManager.stateFile, 'utf8'));
+      expect(final.progress.processed).toBe(2);
+    });
   });
   
   describe('report generation', () => {
